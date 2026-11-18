@@ -31,23 +31,27 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun EscapeApp(vm: EscapeViewModel = viewModel()) {
     val s = vm.state
+    val isPlaying = s.screen == Screen.GAME
     HorrorTheme(s.alternate) {
         BackHandler(enabled = s.screen != Screen.MENU && !s.showIntroduction) { vm.navigate(Screen.MENU) }
         Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("ARCHIVO / 404", style = MaterialTheme.typography.labelLarge)
-                    TextButton(onClick = vm::toggleTheme) { Text(if (s.alternate) "Paleta: ceniza" else "Paleta: carmesí") }
+            Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(if (isPlaying) 8.dp else 24.dp),
+                verticalArrangement = Arrangement.spacedBy(if (isPlaying) 8.dp else 20.dp)) {
+                if (!isPlaying) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("ARCHIVO / 404", style = MaterialTheme.typography.labelLarge)
+                        TextButton(onClick = vm::toggleTheme) { Text(if (s.alternate) "Paleta: ceniza" else "Paleta: carmesí") }
+                    }
                 }
                 when(s.screen) {
+                    Screen.GAME -> GameScreen(onBack = { vm.navigate(Screen.MENU) })
                     Screen.MENU -> {
                         Text("NO TODAS LAS PUERTAS\nDEBERÍAN ABRIRSE.", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         Text("ROOM 404", style = MaterialTheme.typography.headlineLarge)
                         Text("E S C A P E", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                         Illustration(R.drawable.corridor, "Pasillo oscuro hacia la puerta 404, con una silueta al fondo")
                         Text("Despertaste en una habitación desconocida. Encuentra lo que falta antes de que la oscuridad te encuentre a ti.", style = MaterialTheme.typography.bodyLarge)
-                        Button(onClick = { vm.introduction(true) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(4.dp)) { Text("Jugar") }
+                        Button(onClick = { vm.navigate(Screen.GAME) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(4.dp)) { Text("Jugar") }
                         OutlinedButton(onClick = { vm.navigate(Screen.SCORES) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(4.dp)) { Text("High Scores") }
                         OutlinedButton(onClick = { vm.navigate(Screen.ART) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(4.dp)) { Text("Arte conceptual") }
                         Text("Exploración y supervivencia 2D", style = MaterialTheme.typography.bodySmall)
@@ -55,7 +59,7 @@ fun EscapeApp(vm: EscapeViewModel = viewModel()) {
                     Screen.SCORES -> {
                         BackToMenu(vm)
                         Text("LOS QUE ESCAPARON", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text("High Scores", style = MaterialTheme.typography.headlineLarge)
+                        Text("Puntuaciones", style = MaterialTheme.typography.headlineLarge)
                         Text("Datos de demostración · Sin conexión a Firebase", style = MaterialTheme.typography.bodyMedium)
                         vm.scores.forEachIndexed { index, score ->
                             Card(shape = RoundedCornerShape(4.dp)) {
@@ -81,17 +85,19 @@ fun EscapeApp(vm: EscapeViewModel = viewModel()) {
                         Text(art.title, style = MaterialTheme.typography.headlineMedium)
                         Text(art.description, style = MaterialTheme.typography.bodyLarge)
                     }
+
                 }
-                HorizontalDivider()
-                Text("ROOM 404: ESCAPE / PROTOTIPO DE INTERFAZ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                if (!isPlaying) {
+                    HorizontalDivider()
+                    Text(
+                        "ROOM 404: ESCAPE / PROTOTIPO DE INTERFAZ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
             }
         }
-        if(s.showIntroduction) AlertDialog(
-            onDismissRequest = { vm.introduction(false) },
-            title = { Text("La puerta aún está cerrada") },
-            text = { Text("Explora un escenario 2D, reúne objetos ocultos y evita a la presencia. Al reunirlos todos, encuentra la salida durante la persecución final.\n\nEsta entrega presenta la interfaz. El movimiento, los objetos y el enemigo se implementarán después.") },
-            confirmButton = { TextButton(onClick = { vm.introduction(false) }) { Text("Volver al menú") } }
-        )
+
     }
 }
 @Composable

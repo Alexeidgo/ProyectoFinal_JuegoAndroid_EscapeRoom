@@ -7,7 +7,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import mx.unam.room404escape.data.*
 
-enum class Screen { MENU, SCORES, ART }
+enum class Screen { MENU, SCORES, ART , GAME}
 data class EscapeUiState(
     val screen: Screen = Screen.MENU,
     val alternate: Boolean = false,
