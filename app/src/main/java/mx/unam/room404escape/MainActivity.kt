@@ -1,3 +1,4 @@
+
 package mx.unam.room404escape
 
 import android.os.Bundle
@@ -20,75 +21,304 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import mx.unam.room404escape.ui.*
 
-
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent { EscapeApp() }
     }
 }
+
 @Composable
 fun EscapeApp(vm: EscapeViewModel = viewModel()) {
+
     val s = vm.state
     val isPlaying = s.screen == Screen.GAME
+
     HorrorTheme(s.alternate) {
-        BackHandler(enabled = s.screen != Screen.MENU && !s.showIntroduction) { vm.navigate(Screen.MENU) }
-        Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(if (isPlaying) 8.dp else 24.dp),
-                verticalArrangement = Arrangement.spacedBy(if (isPlaying) 8.dp else 20.dp)) {
+
+        BackHandler(
+            enabled = s.screen != Screen.MENU &&
+                    !s.showIntroduction
+        ) {
+            vm.navigate(Screen.MENU)
+        }
+
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background
+        ) { padding ->
+
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(if (isPlaying) 8.dp else 24.dp),
+                verticalArrangement = Arrangement.spacedBy(
+                    if (isPlaying) 8.dp else 20.dp
+                )
+            ) {
+
                 if (!isPlaying) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("ARCHIVO / 404", style = MaterialTheme.typography.labelLarge)
-                        TextButton(onClick = vm::toggleTheme) { Text(if (s.alternate) "Paleta: ceniza" else "Paleta: carmesí") }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "ARCHIVO / 404",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+
+                        TextButton(onClick = vm::toggleTheme) {
+                            Text(
+                                if (s.alternate)
+                                    "Paleta: ceniza"
+                                else
+                                    "Paleta: carmesí"
+                            )
+                        }
                     }
                 }
-                when(s.screen) {
-                    Screen.GAME -> GameScreen(onBack = { vm.navigate(Screen.MENU) })
-                    Screen.MENU -> {
-                        Text("NO TODAS LAS PUERTAS\nDEBERÍAN ABRIRSE.", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text("ROOM 404", style = MaterialTheme.typography.headlineLarge)
-                        Text("E S C A P E", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-                        Illustration(R.drawable.corridor, "Pasillo oscuro hacia la puerta 404, con una silueta al fondo")
-                        Text("Despertaste en una habitación desconocida. Encuentra lo que falta antes de que la oscuridad te encuentre a ti.", style = MaterialTheme.typography.bodyLarge)
-                        Button(onClick = { vm.navigate(Screen.GAME) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(4.dp)) { Text("Jugar") }
-                        OutlinedButton(onClick = { vm.navigate(Screen.SCORES) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(4.dp)) { Text("High Scores") }
-                        OutlinedButton(onClick = { vm.navigate(Screen.ART) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(4.dp)) { Text("Arte conceptual") }
-                        Text("Exploración y supervivencia 2D", style = MaterialTheme.typography.bodySmall)
+
+                when (s.screen) {
+
+                    Screen.GAME -> {
+                        GameScreen(
+                            onBack = {
+                                vm.navigate(Screen.MENU)
+                            }
+                        )
                     }
+
+                    Screen.MENU -> {
+
+                        Text(
+                            "NO TODAS LAS PUERTAS\nDEBERÍAN ABRIRSE.",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            "ROOM 404",
+                            style = MaterialTheme.typography.headlineLarge
+                        )
+
+                        Text(
+                            "E S C A P E",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+
+                        Illustration(
+                            R.drawable.corridor,
+                            "Pasillo oscuro hacia la puerta 404, con una silueta al fondo"
+                        )
+
+                        Text(
+                            "Despertaste en una habitación desconocida. Encuentra lo que falta antes de que la oscuridad te encuentre a ti.",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+                        Button(
+                            onClick = {
+                                vm.navigate(Screen.GAME)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 56.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text("Jugar")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                vm.navigate(Screen.SCORES)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text("High Scores")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                vm.navigate(Screen.ART)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text("Arte conceptual")
+                        }
+
+                        Text(
+                            "Exploración y supervivencia 2D",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    // PUNTUACIONES REALES DE FIREBASE
                     Screen.SCORES -> {
+
                         BackToMenu(vm)
-                        Text("LOS QUE ESCAPARON", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text("Puntuaciones", style = MaterialTheme.typography.headlineLarge)
-                        Text("Datos de demostración · Sin conexión a Firebase", style = MaterialTheme.typography.bodyMedium)
-                        vm.scores.forEachIndexed { index, score ->
-                            Card(shape = RoundedCornerShape(4.dp)) {
-                                Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("${index + 1}.  ${score.player}", fontFamily = FontFamily.Monospace)
-                                    Text("${score.points} pts", fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
+
+                        Text(
+                            "LOS QUE ESCAPARON",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            "Puntuaciones",
+                            style = MaterialTheme.typography.headlineLarge
+                        )
+
+                        Text(
+                            "Resultados guardados en Firebase",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        when {
+
+                            // Esperando respuesta de Firebase
+                            vm.cargandoPuntuaciones -> {
+                                CircularProgressIndicator()
+
+                                Text(
+                                    "Cargando puntuaciones..."
+                                )
+                            }
+
+                            // Error de conexión
+                            vm.errorPuntuaciones != null -> {
+                                Text(
+                                    "No se pudieron cargar las puntuaciones.",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+
+                                Text(
+                                    vm.errorPuntuaciones ?: "",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+
+                                Button(
+                                    onClick = {
+                                        vm.cargarPuntuaciones()
+                                    }
+                                ) {
+                                    Text("Reintentar")
+                                }
+                            }
+
+                            // Sin registros
+                            vm.scores.isEmpty() -> {
+                                Text(
+                                    "Todavía no hay victorias registradas."
+                                )
+                            }
+
+                            // Mostrar puntuaciones reales
+                            else -> {
+
+                                vm.scores.forEachIndexed { index, score ->
+
+                                    Card(
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Row(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(20.dp),
+                                            horizontalArrangement =
+                                                Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                "${index + 1}.  ${score.player}",
+                                                fontFamily = FontFamily.Monospace
+                                            )
+
+                                            Text(
+                                                "${score.points} pts",
+                                                fontFamily = FontFamily.Monospace,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        vm.cargarPuntuaciones()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Actualizar puntuaciones")
                                 }
                             }
                         }
-                        Text("En una siguiente etapa se mostrarán los resultados de los jugadores guardados en Firebase.", style = MaterialTheme.typography.bodyLarge)
-                    }
-                    Screen.ART -> {
-                        BackToMenu(vm)
-                        Text("REGISTROS DE LA HABITACIÓN", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text("Arte conceptual", style = MaterialTheme.typography.headlineLarge)
-                        Text("Bocetos provisionales", style = MaterialTheme.typography.bodyMedium)
-                        vm.concepts.forEachIndexed { i, concept ->
-                            FilterChip(selected = s.conceptIndex == i, onClick = { vm.selectConcept(i) }, label = { Text(concept.title) })
-                        }
-                        val art = vm.concepts[s.conceptIndex]
-                        val resource = when(s.conceptIndex) { 1 -> R.drawable.entity2; 2 -> R.drawable.objects; else -> R.drawable.corridor }
-                        Illustration(resource, art.title + ": " + art.description)
-                        Text(art.title, style = MaterialTheme.typography.headlineMedium)
-                        Text(art.description, style = MaterialTheme.typography.bodyLarge)
                     }
 
+                    Screen.ART -> {
+
+                        BackToMenu(vm)
+
+                        Text(
+                            "REGISTROS DE LA HABITACIÓN",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            "Arte conceptual",
+                            style = MaterialTheme.typography.headlineLarge
+                        )
+
+                        Text(
+                            "Bocetos provisionales",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        vm.concepts.forEachIndexed { i, concept ->
+                            FilterChip(
+                                selected = s.conceptIndex == i,
+                                onClick = {
+                                    vm.selectConcept(i)
+                                },
+                                label = {
+                                    Text(concept.title)
+                                }
+                            )
+                        }
+
+                        val art = vm.concepts[s.conceptIndex]
+
+                        val resource = when (s.conceptIndex) {
+                            1 -> R.drawable.entity2
+                            2 -> R.drawable.objects
+                            else -> R.drawable.corridor
+                        }
+
+                        Illustration(
+                            resource,
+                            art.title + ": " + art.description
+                        )
+
+                        Text(
+                            art.title,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+
+                        Text(
+                            art.description,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
                 }
+
                 if (!isPlaying) {
                     HorizontalDivider()
+
                     Text(
                         "ROOM 404: ESCAPE / PROTOTIPO DE INTERFAZ",
                         style = MaterialTheme.typography.labelSmall,
@@ -97,17 +327,35 @@ fun EscapeApp(vm: EscapeViewModel = viewModel()) {
                 }
             }
         }
-
     }
 }
+
 @Composable
 private fun BackToMenu(vm: EscapeViewModel) {
-    TextButton(onClick = { vm.navigate(Screen.MENU) }) { Text("← Menú principal") }
+    TextButton(
+        onClick = {
+            vm.navigate(Screen.MENU)
+        }
+    ) {
+        Text("← Menú principal")
+    }
 }
+
 @Composable
-private fun Illustration(resource: Int, description: String) {
-    Card(shape = RoundedCornerShape(4.dp)) {
-        Image(painterResource(resource), contentDescription = description, contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxWidth().aspectRatio(400f / 240f))
+private fun Illustration(
+    resource: Int,
+    description: String
+) {
+    Card(
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Image(
+            painter = painterResource(resource),
+            contentDescription = description,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(400f / 240f)
+        )
     }
 }
