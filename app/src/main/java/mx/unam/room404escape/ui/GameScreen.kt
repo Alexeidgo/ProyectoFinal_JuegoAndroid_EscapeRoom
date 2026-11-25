@@ -38,6 +38,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.dp
+import android.util.Log
+import mx.unam.room404escape.data.Partida
+import mx.unam.room404escape.data.PartidasFirebaseRepository
 
 private const val MAP_WIDTH = 12f
 private const val MAP_HEIGHT = 17.5f
@@ -457,8 +460,12 @@ fun GameScreen(onBack: () -> Unit) {
     var personalBest by rememberSaveable { mutableStateOf<Long?>(null) }
     val keyboard = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
+    val partidasRepository = remember {
+        PartidasFirebaseRepository()
+    }
     val records = remember(context) {
         context.getSharedPreferences("escape_room_records", Context.MODE_PRIVATE)
+
     }
 
     var roomName by rememberSaveable { mutableStateOf(Room.MAIN.name) }
@@ -541,21 +548,73 @@ fun GameScreen(onBack: () -> Unit) {
         restart()
     }
 
+
     fun finishGame(escaped: Boolean) {
         if (hasWon || hasLost) return
-        elapsedMillis = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+
+        // Calcular tiempo, objetos y puntuación
+        elapsedMillis = (
+                SystemClock.elapsedRealtime() - startedAt
+                ).coerceAtLeast(0L)
+
+        val objetosObtenidos =
+            Integer.bitCount(collectedMask) +
+                    (if (hasFlashlight) 1 else 0)
+
+        val puntosObtenidos = calculateScore(
+            objetosObtenidos,
+            escaped,
+            elapsedMillis
+        )
+
+        // Conservar el récord personal local
         if (escaped && playerName.isNotBlank()) {
-            val score = calculateScore(Integer.bitCount(collectedMask) + if (hasFlashlight) 1 else 0,
-                true, elapsedMillis)
             val key = "best:$playerName"
-            val best = maxOf(records.getLong(key, score), score)
+            val best = maxOf(
+                records.getLong(key, puntosObtenidos),
+                puntosObtenidos
+            )
+
             personalBest = best
             records.edit().putLong(key, best).apply()
         }
+
+        // Finalizar la partida
         joystickDirection = Offset.Zero
         hasWon = escaped
         hasLost = !escaped
+
+        // Preparar los datos para Firebase
+        val partida = Partida(
+            jugador = playerName.trim()
+                .take(40)
+                .ifBlank { "Invitado" },
+            puntuacion = puntosObtenidos,
+            tiempoSegundos = elapsedMillis / 1000L,
+            objetos = objetosObtenidos.toLong(),
+            resultado = if (escaped) "victoria"
+            else "derrota"
+        )
+
+        // Guardar automáticamente en Firestore
+        partidasRepository.guardarPartida(
+            partida = partida,
+            onSuccess = {
+                Log.d(
+                    "FirebasePartidas",
+                    "Partida guardada correctamente"
+                )
+            },
+            onError = { error ->
+                Log.e(
+                    "FirebasePartidas",
+                    "Error al guardar partida",
+                    error
+                )
+            }
+        )
     }
+
 
     fun checkCapture() {
         if (roomName == monsterRoomName &&
