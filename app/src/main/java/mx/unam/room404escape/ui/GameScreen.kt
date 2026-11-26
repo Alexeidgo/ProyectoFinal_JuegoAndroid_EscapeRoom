@@ -837,20 +837,33 @@ private fun hitsWall(
 // Un solo monstruo, con la misma aparición inicial; recorre puertas verdes y escaleras.
 private val monsterSpawnRoom = Room.UPPER
 private val monsterSpawn = point(10.1f, 1.4f)
-private const val MONSTER_PATROL_BASE = 2.8f
-private const val MONSTER_PATROL_PER_OBJECT = 0.12f
-private const val MONSTER_CHASE_BASE = 3.6f
-private const val MONSTER_CHASE_PER_OBJECT = 0.12f
+private const val MONSTER_PATROL_BASE = 2.3f
+private const val MONSTER_PATROL_PER_OBJECT = 0.10f
+private const val MONSTER_CHASE_BASE = 2.5f
+private const val MONSTER_CHASE_PER_OBJECT = 0.10f
 private const val MONSTER_SIGHT_RANGE = 12f
 private const val MONSTER_CAPTURE_DISTANCE = 0.58f
 private const val MONSTER_DOOR_DELAY = 0.30f
 
-private fun monsterChaseSpeed(objects: Int) =
-    MONSTER_CHASE_BASE + objects.coerceIn(0, TOTAL_OBJECTS) * MONSTER_CHASE_PER_OBJECT
 
-private fun monsterPatrolSpeed(objects: Int) =
-    if (objects >= 6) monsterChaseSpeed(objects)
-    else MONSTER_PATROL_BASE + objects.coerceIn(0, TOTAL_OBJECTS) * MONSTER_PATROL_PER_OBJECT
+private fun monsterChaseSpeed(objects: Int): Float =
+    (
+            MONSTER_CHASE_BASE +
+                    objects.coerceIn(0, TOTAL_OBJECTS) *
+                    MONSTER_CHASE_PER_OBJECT
+            ).coerceAtMost(MOVE_SPEED)
+
+private fun monsterPatrolSpeed(objects: Int): Float =
+    (
+            if (objects >= 6) {
+                monsterChaseSpeed(objects)
+            } else {
+                MONSTER_PATROL_BASE +
+                        objects.coerceIn(0, TOTAL_OBJECTS) *
+                        MONSTER_PATROL_PER_OBJECT
+            }
+            ).coerceAtMost(MOVE_SPEED)
+
 
 private const val FINAL_PURSUIT_DELAY_MS = 4_000L
 private fun isFinalRoom(room: Room) = room == Room.FINAL_LOWER || room == Room.FINAL_UPPER
