@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import mx.unam.room404escape.ui.*
+import androidx.compose.ui.platform.LocalUriHandler
 
 class MainActivity : ComponentActivity() {
 
@@ -152,6 +153,18 @@ fun EscapeApp(vm: EscapeViewModel = viewModel()) {
                             Text("Arte conceptual")
                         }
 
+
+                        OutlinedButton(
+                            onClick = {
+                                vm.navigate(Screen.CREDITS)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text("Créditos")
+                        }
+
+
                         Text(
                             "Exploración y supervivencia 2D",
                             style = MaterialTheme.typography.bodySmall
@@ -258,6 +271,150 @@ fun EscapeApp(vm: EscapeViewModel = viewModel()) {
                             }
                         }
                     }
+
+
+
+                    Screen.CREDITS -> {
+
+                        BackToMenu(vm)
+
+                        val uriHandler = LocalUriHandler.current
+
+                        Text(
+                            "ARCHIVO / CRÉDITOS",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            "Créditos",
+                            style = MaterialTheme.typography.headlineLarge
+                        )
+
+                        Text(
+                            "ROOM 404: ESCAPE",
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+
+                        HorizontalDivider()
+
+                        Text(
+                            "DESARROLLO",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            "Videojuego desarrollado como proyecto académico " +
+                                    "para las materias de Temas Selectos de Programación" +
+                                    "y Técnicas de Programación.",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+                        Text(
+                            "EQUIPO DE DESARROLLO",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            "Desarrollado por:\n\n" +
+                                    "• Escamilla García Diego Alexei\n" +
+                                    "• Nieto Corona Daniel\n" +
+                                    "• Rojas Castañeda Adolfo\n" +
+                                    "• San Miguel Lara Fernando Elihu\n" +
+                                    "• Valdéz Zúñiga Montserrat",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+
+                        HorizontalDivider()
+
+                        Text(
+                            "RECURSOS Y AGRADECIMIENTOS",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            "Los efectos de sonido utilizados en Room 404: Escape " +
+                                    "fueron obtenidos de Freesound (freesound.org). " +
+                                    "Los siguientes recursos se identifican con licencia " +
+                                    "Creative Commons 0 (CC0). Agradecemos a sus " +
+                                    "creadores por compartirlos con la comunidad.",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+                        val sonidos = listOf(
+                            Triple(
+                                "Picking Up A Small Item",
+                                "qubodup",
+                                "https://freesound.org/s/822565/"
+                            ),
+                            Triple(
+                                "door open",
+                                "saha213131",
+                                "https://freesound.org/s/683434/"
+                            ),
+                            Triple(
+                                "Footstep_Run_HardSurface_9.wav",
+                                "nicholasdaryl",
+                                "https://freesound.org/s/563476/"
+                            ),
+                            Triple(
+                                "Heart Beating 2",
+                                "CAT-FOX_ALEX",
+                                "https://freesound.org/s/829801/"
+                            ),
+                            Triple(
+                                "Monster scream",
+                                "Marvin_Chiriguaya",
+                                "https://freesound.org/s/705784/"
+                            ),
+                            Triple(
+                                "jp_tinypadlock01.flac",
+                                "JPolito",
+                                "https://freesound.org/s/391704/"
+                            )
+                        )
+
+                        sonidos.forEach { (titulo, autor, enlace) ->
+
+                            Text(
+                                titulo,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+
+                            Text(
+                                "Autor: $autor",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+
+                            Text(
+                                "Licencia: Creative Commons 0 (CC0)",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+
+                            TextButton(
+                                onClick = {
+                                    uriHandler.openUri(enlace)
+                                }
+                            ) {
+                                Text("Ver recurso en Freesound")
+                            }
+                        }
+
+                        HorizontalDivider()
+
+                        Text(
+                            "Agradecemos a los autores y a la comunidad de " +
+                                    "Freesound por facilitar recursos sonoros " +
+                                    "para el desarrollo de este proyecto académico.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+
 
                     Screen.ART -> {
 

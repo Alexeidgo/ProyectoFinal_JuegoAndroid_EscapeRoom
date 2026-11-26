@@ -11,7 +11,7 @@ import mx.unam.room404escape.data.*
 import com.google.firebase.auth.FirebaseAuth
 
 enum class Screen {
-    MENU, SCORES, ART, GAME
+    MENU, SCORES, ART, GAME, CREDITS
 }
 
 data class EscapeUiState(

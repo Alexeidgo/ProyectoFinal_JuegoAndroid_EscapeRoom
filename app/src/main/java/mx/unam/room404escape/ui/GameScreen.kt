@@ -51,6 +51,17 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipRect
+import android.media.AudioAttributes
+import android.media.SoundPool
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import android.media.MediaPlayer
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clipToBounds
 
 private const val MAP_WIDTH = 12f
 private const val MAP_HEIGHT = 17.5f
@@ -967,7 +978,187 @@ private fun calculateScore(objects: Int, escaped: Boolean, milliseconds: Long): 
     return (escapeBonus + objectBonus - timePenalty).coerceAtLeast(0L)
 }
 
+
+private class AudioJuego(context: Context) {
+
+    private val soundPool = SoundPool.Builder()
+        .setMaxStreams(5)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+        )
+        .build()
+
+    private var sonidoRecoger = 0
+    private var sonidoPuerta = 0
+
+    private var sonidoPasos = 0
+    private var pasosListos = false
+    private var ultimoPasoMs = 0L
+
+    private var recogerListo = false
+    private var puertaLista = false
+
+    private var sonidoLatido = 0
+    private var latidoListo = false
+    private var ultimoLatidoMs = 0L
+    private var estadoLatidoAnterior = 0
+
+    private var sonidoPuertaCerrada = 0
+    private var puertaCerradaLista = false
+    private var ultimoIntentoPuertaCerrada = 0L
+
+    init {
+        soundPool.setOnLoadCompleteListener { _, id, estado ->
+            if (estado == 0) {
+                if (id == sonidoRecoger) {
+                    recogerListo = true
+                }
+
+                if (id == sonidoPuerta) {
+                    puertaLista = true
+                }
+                if (id == sonidoPasos) {
+                    pasosListos = true
+                }
+
+                if (id == sonidoLatido && estado == 0) {
+                    latidoListo = true
+                }
+
+                if (id == sonidoPuertaCerrada) {
+                    puertaCerradaLista = true
+                }
+
+            }
+
+        }
+
+        sonidoRecoger = soundPool.load(
+            context, R.raw.recoger, 1
+        )
+
+        sonidoPuerta = soundPool.load(
+            context, R.raw.puerta, 1
+        )
+
+        sonidoPasos = soundPool.load(
+            context, R.raw.pasos, 1
+        )
+
+        sonidoLatido = soundPool.load(
+            context, R.raw.latido, 1
+        )
+
+        sonidoPuertaCerrada = soundPool.load(
+            context, R.raw.puerta_cerrada, 1
+        )
+    }
+
+    fun recoger() {
+        if (recogerListo) {
+            soundPool.play(
+                sonidoRecoger,
+                1f, 1f,
+                1, 0, 1f
+            )
+        }
+    }
+
+    fun abrirPuerta() {
+        if (puertaLista) {
+            soundPool.play(
+                sonidoPuerta,
+                1f, 1f,
+                1, 0, 1f
+            )
+        }
+    }
+
+
+    fun caminar() {
+        val ahora = SystemClock.elapsedRealtime()
+
+        // Esperar 360 ms entre pisadas
+        if (!pasosListos || ahora - ultimoPasoMs < 360L) {
+            return
+        }
+
+        ultimoPasoMs = ahora
+
+        soundPool.play(
+            sonidoPasos,
+            0.30f, 0.30f,
+            1, 0, 1f
+        )
+    }
+
+    fun actualizarLatido(estado: Int) {
+
+        // 0 = silencio
+        // 1 = latidos lentos
+        // 2 = latidos rapidos
+
+        if (estado != estadoLatidoAnterior) {
+            estadoLatidoAnterior = estado
+            ultimoLatidoMs = 0L
+        }
+
+        if (estado == 0 || !latidoListo) return
+
+        val ahora = SystemClock.elapsedRealtime()
+
+        val intervalo = if (estado == 2) {
+            500L
+        } else {
+            950L
+        }
+
+        if (ahora - ultimoLatidoMs < intervalo) return
+
+        ultimoLatidoMs = ahora
+
+        val volumen = if (estado == 2) {
+            0.85f
+        } else {
+            0.40f
+        }
+
+        soundPool.play(
+            sonidoLatido,
+            volumen, volumen,
+            1, 0, 1f
+        )
+    }
+
+    fun puertaCerrada() {
+        if (!puertaCerradaLista) return
+
+        val ahora = SystemClock.elapsedRealtime()
+
+        // Evita repetir el sonido constantemente
+        if (ahora - ultimoIntentoPuertaCerrada < 1000L) {
+            return
+        }
+
+        ultimoIntentoPuertaCerrada = ahora
+
+        soundPool.play(
+            sonidoPuertaCerrada,
+            1f, 1f,
+            1, 0, 1f
+        )
+    }
+
+    fun liberar() {
+        soundPool.release()
+    }
+}
+
 @Composable
+
 fun GameScreen(onBack: () -> Unit) {
     var gameStarted by rememberSaveable { mutableStateOf(false) }
     var nameDraft by rememberSaveable { mutableStateOf("") }
@@ -977,6 +1168,17 @@ fun GameScreen(onBack: () -> Unit) {
     var personalBest by rememberSaveable { mutableStateOf<Long?>(null) }
     val keyboard = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
+
+    val audioJuego = remember(context) {
+        AudioJuego(context.applicationContext)
+    }
+
+    DisposableEffect(audioJuego) {
+        onDispose {
+            audioJuego.liberar()
+        }
+    }
+
     val partidasRepository = remember {
         PartidasFirebaseRepository()
     }
@@ -993,6 +1195,9 @@ fun GameScreen(onBack: () -> Unit) {
     var collectedMask by rememberSaveable { mutableIntStateOf(0) }
     var hasWon by rememberSaveable { mutableStateOf(false) }
     var hasLost by rememberSaveable { mutableStateOf(false) }
+    var mostrarScreamer by rememberSaveable {
+        mutableStateOf(false)
+    }
     var monsterX by rememberSaveable { mutableFloatStateOf(monsterSpawn.x) }
     var monsterY by rememberSaveable { mutableFloatStateOf(monsterSpawn.y) }
     var monsterFacing by rememberSaveable {
@@ -1041,6 +1246,7 @@ fun GameScreen(onBack: () -> Unit) {
         collectedMask = 0
         hasWon = false
         hasLost = false
+        mostrarScreamer = false
         monsterX = monsterSpawn.x
         monsterY = monsterSpawn.y
         monsterRoomName = monsterSpawnRoom.name
@@ -1101,9 +1307,14 @@ fun GameScreen(onBack: () -> Unit) {
         }
 
         // Finalizar la partida
+
         joystickDirection = Offset.Zero
         hasWon = escaped
         hasLost = !escaped
+
+// Mostrar screamer solamente cuando perdemos
+        mostrarScreamer = !escaped
+
 
         // Preparar los datos para Firebase
         val partida = Partida(
@@ -1207,6 +1418,92 @@ fun GameScreen(onBack: () -> Unit) {
         return
     }
 
+
+
+    if (hasLost && mostrarScreamer) {
+
+        // Reproducir el sonido del screamer
+        DisposableEffect(context) {
+
+            val reproductor = MediaPlayer.create(
+                context,
+                R.raw.screamer
+            )
+
+            if (reproductor != null) {
+
+                // Cuando termina el audio,
+                // desaparece la imagen
+                reproductor.setOnCompletionListener {
+                    mostrarScreamer = false
+                }
+
+                reproductor.setOnErrorListener { _, _, _ ->
+                    mostrarScreamer = false
+                    true
+                }
+
+                reproductor.start()
+
+            } else {
+                mostrarScreamer = false
+            }
+
+            onDispose {
+                reproductor?.release()
+            }
+        }
+
+        // Mostrar imagen en pantalla
+
+        val movimientoVertical by rememberInfiniteTransition(
+            label = "Screamer"
+        ).animateFloat(
+            initialValue = -50f,
+            targetValue = 50f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 100,
+                    easing = LinearEasing
+                ),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "Movimiento vertical"
+        )
+
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .clipToBounds()
+            ) {
+                Image(
+                    bitmap = ImageBitmap.imageResource(
+                        R.drawable.screamer_entidad
+                    ),
+                    contentDescription = "La entidad te ha atrapado",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationY = movimientoVertical
+                            scaleX = 1.15f
+                            scaleY = 1.15f
+                        },
+                    contentScale = ContentScale.Crop,
+                    filterQuality = FilterQuality.None
+                )
+            }
+        }
+    }
+
+
     if (hasWon || hasLost) {
         Column(
             modifier = Modifier.fillMaxWidth().heightIn(min = 400.dp).padding(24.dp),
@@ -1256,8 +1553,13 @@ fun GameScreen(onBack: () -> Unit) {
         if (!hitsWall(horizontal, walls)) next = horizontal
         val vertical = next + Offset(0f, dy)
         if (!hitsWall(vertical, walls)) next = vertical
+
         if (next == previous) return
         val movimiento = next - previous
+
+// Reproducir pisadas cuando el personaje avanza
+        audioJuego.caminar()
+
 
         playerFacing = if (
             kotlin.math.abs(movimiento.x) > kotlin.math.abs(movimiento.y)
@@ -1271,15 +1573,31 @@ fun GameScreen(onBack: () -> Unit) {
         playerY = next.y
         checkCapture()
         if (hasLost) return
-        if (currentRoom == Room.MAIN && isNear(next, flashlight, PICKUP_RADIUS)) {
+
+        if (
+            currentRoom == Room.MAIN &&
+            !hasFlashlight &&
+            isNear(next, flashlight, PICKUP_RADIUS)
+        ) {
             hasFlashlight = true
+            audioJuego.recoger()
         }
 
+
+
         collectibles.forEach { item ->
-            if (item.room == currentRoom && isNear(next, item.position, PICKUP_RADIUS)) {
+            if (
+                item.room == currentRoom &&
+                (collectedMask and (1 shl item.id)) == 0 &&
+                isNear(next, item.position, PICKUP_RADIUS)
+            ) {
                 collectedMask = collectedMask or (1 shl item.id)
+
+                // Reproducir sonido al recoger el objeto
+                audioJuego.recoger()
             }
         }
+
         // Se consulta el estado actual: recoger repetidamente un objeto no suma más veces.
         val countNow = Integer.bitCount(collectedMask) + if (hasFlashlight) 1 else 0
         if (currentRoom == Room.FINAL_UPPER && countNow == TOTAL_OBJECTS &&
@@ -1297,7 +1615,15 @@ fun GameScreen(onBack: () -> Unit) {
             it.name != destinationDoorName && isNear(next, it.position, PORTAL_RADIUS)
         }
         if (doorway != null) {
-            if (doorway.kind == PortalKind.FINAL_ACCESS && countNow < TOTAL_OBJECTS) return
+
+            if (
+                doorway.kind == PortalKind.FINAL_ACCESS &&
+                countNow < TOTAL_OBJECTS
+            ) {
+                audioJuego.puertaCerrada()
+                return
+            }
+
             // Solo recuerda la puerta si ha visto al jugador cruzarla.
             // No conoce la ubicación del jugador a través de paredes u otras salas.
             val monsterPosition = Offset(monsterX, monsterY)
@@ -1311,11 +1637,17 @@ fun GameScreen(onBack: () -> Unit) {
                 brainFor(currentRoom).reset()
                 monsterChasing = true
             }
+
             val destination = doorway.destination()
+
+            // Sonido al atravesar una puerta o escalera
+            audioJuego.abrirPuerta()
+
             destinationDoorName = destination.name
             roomName = destination.room.name
             playerX = destination.arrival.x
             playerY = destination.arrival.y
+
             if (isFinalRoom(destination.room) && !isFinalRoom(currentRoom)) {
                 finalEntryAt = SystemClock.elapsedRealtime()
                 finalRushHandled = false
@@ -1499,6 +1831,37 @@ fun GameScreen(onBack: () -> Unit) {
                 moveNow(direction.x * MOVE_SPEED * seconds, direction.y * MOVE_SPEED * seconds)
             }
             monsterNow(seconds)
+
+
+// Calcular distancia entre jugador y monstruo
+            val personaje = Offset(playerX, playerY)
+            val monstruo = Offset(monsterX, monsterY)
+
+            val distancia = (personaje - monstruo).getDistance()
+
+// Comprobar si estan en la misma sala
+// y pueden verse sin paredes de por medio
+
+
+            val mismaSala = roomName == monsterRoomName
+
+            val estadoLatido = when {
+
+                // El monstruo está en otra habitación
+                !gameStarted || hasWon || hasLost || !mismaSala -> 0
+
+                // El monstruo nos persigue y está muy cerca
+                monsterChasing && distancia < 4f -> 2
+
+                // El monstruo está en nuestra habitación,
+                // pero todavía no está lo suficientemente cerca
+                else -> 1
+            }
+
+// Reproducir latidos según el peligro
+            audioJuego.actualizarLatido(estadoLatido)
+
+
         }
     }
 
@@ -1563,10 +1926,23 @@ fun GameScreen(onBack: () -> Unit) {
         ImageBitmap.imageResource(R.drawable.tarjeta),
         ImageBitmap.imageResource(R.drawable.fusible)
     )
+
     val nearFinalDoor = doorways.any {
         it.kind == PortalKind.FINAL_ACCESS &&
-            isNear(Offset(playerX, playerY), it.position, 1.7f)
+                isNear(
+                    Offset(playerX, playerY),
+                    it.position,
+                    1.7f
+                )
     }
+
+// Reproducir sonido al acercarse a la puerta bloqueada
+    LaunchedEffect(nearFinalDoor, collectedCount < TOTAL_OBJECTS) {
+        if (nearFinalDoor && collectedCount < TOTAL_OBJECTS) {
+            audioJuego.puertaCerrada()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxWidth()) {
         Canvas(
             modifier = Modifier
@@ -1757,6 +2133,38 @@ fun GameScreen(onBack: () -> Unit) {
                             ancho * imagen.height.toFloat() /
                                     imagen.width
                             ).roundToInt().coerceAtLeast(1)
+
+                    val radioAura = 0.55f * unit
+
+                    // Aura roja difuminada
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color(0x88FF3B3B),
+                                Color(0x44FF3B3B),
+                                Color(0x10FF3B3B),
+                                Color.Transparent
+                            ),
+                            center = centro,
+                            radius = radioAura
+                        ),
+                        radius = radioAura,
+                        center = centro
+                    )
+
+                    // Núcleo un poco más intenso
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color(0x55FF5A5A),
+                                Color.Transparent
+                            ),
+                            center = centro,
+                            radius = 0.45f * unit
+                        ),
+                        radius = 0.45f * unit,
+                        center = centro
+                    )
 
                     drawImage(
                         image = imagen,
