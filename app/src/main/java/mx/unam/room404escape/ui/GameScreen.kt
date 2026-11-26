@@ -837,20 +837,33 @@ private fun hitsWall(
 // Un solo monstruo, con la misma aparición inicial; recorre puertas verdes y escaleras.
 private val monsterSpawnRoom = Room.UPPER
 private val monsterSpawn = point(10.1f, 1.4f)
-private const val MONSTER_PATROL_BASE = 2.8f
-private const val MONSTER_PATROL_PER_OBJECT = 0.12f
-private const val MONSTER_CHASE_BASE = 3.6f
-private const val MONSTER_CHASE_PER_OBJECT = 0.12f
+private const val MONSTER_PATROL_BASE = 2.3f
+private const val MONSTER_PATROL_PER_OBJECT = 0.10f
+private const val MONSTER_CHASE_BASE = 2.5f
+private const val MONSTER_CHASE_PER_OBJECT = 0.10f
 private const val MONSTER_SIGHT_RANGE = 12f
 private const val MONSTER_CAPTURE_DISTANCE = 0.58f
 private const val MONSTER_DOOR_DELAY = 0.30f
 
-private fun monsterChaseSpeed(objects: Int) =
-    MONSTER_CHASE_BASE + objects.coerceIn(0, TOTAL_OBJECTS) * MONSTER_CHASE_PER_OBJECT
 
-private fun monsterPatrolSpeed(objects: Int) =
-    if (objects >= 6) monsterChaseSpeed(objects)
-    else MONSTER_PATROL_BASE + objects.coerceIn(0, TOTAL_OBJECTS) * MONSTER_PATROL_PER_OBJECT
+private fun monsterChaseSpeed(objects: Int): Float =
+    (
+            MONSTER_CHASE_BASE +
+                    objects.coerceIn(0, TOTAL_OBJECTS) *
+                    MONSTER_CHASE_PER_OBJECT
+            ).coerceAtMost(MOVE_SPEED)
+
+private fun monsterPatrolSpeed(objects: Int): Float =
+    (
+            if (objects >= 6) {
+                monsterChaseSpeed(objects)
+            } else {
+                MONSTER_PATROL_BASE +
+                        objects.coerceIn(0, TOTAL_OBJECTS) *
+                        MONSTER_PATROL_PER_OBJECT
+            }
+            ).coerceAtMost(MOVE_SPEED)
+
 
 private const val FINAL_PURSUIT_DELAY_MS = 4_000L
 private fun isFinalRoom(room: Room) = room == Room.FINAL_LOWER || room == Room.FINAL_UPPER
@@ -1152,6 +1165,13 @@ private class AudioJuego(context: Context) {
         )
     }
 
+    fun pausarEfectos() {
+        soundPool.autoPause()
+    }
+
+    fun reanudarEfectos() {
+        soundPool.autoResume()
+    }
     fun liberar() {
         soundPool.release()
     }
@@ -1203,6 +1223,9 @@ fun GameScreen(onBack: () -> Unit) {
     var monsterFacing by rememberSaveable {
         mutableStateOf("abajo")
     }
+    var mostrarVictoria by rememberSaveable {
+        mutableStateOf(false)
+    }
     var monsterRoomName by rememberSaveable { mutableStateOf(monsterSpawnRoom.name) }
     var monsterArrivalDoor by rememberSaveable { mutableStateOf<String?>(null) }
     var monsterRoamDoor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1239,6 +1262,7 @@ fun GameScreen(onBack: () -> Unit) {
     val collectedCount = Integer.bitCount(collectedMask) + if (hasFlashlight) 1 else 0
 
     fun restart() {
+        audioJuego.reanudarEfectos()
         roomName = Room.MAIN.name
         playerX = entrance.x
         playerY = entrance.y
@@ -1247,6 +1271,7 @@ fun GameScreen(onBack: () -> Unit) {
         hasWon = false
         hasLost = false
         mostrarScreamer = false
+        mostrarVictoria = false
         monsterX = monsterSpawn.x
         monsterY = monsterSpawn.y
         monsterRoomName = monsterSpawnRoom.name
@@ -1309,8 +1334,12 @@ fun GameScreen(onBack: () -> Unit) {
         // Finalizar la partida
 
         joystickDirection = Offset.Zero
+        if (escaped) {
+            audioJuego.pausarEfectos()
+        }
         hasWon = escaped
         hasLost = !escaped
+        mostrarVictoria = escaped
 
 // Mostrar screamer solamente cuando perdemos
         mostrarScreamer = !escaped
@@ -1443,6 +1472,7 @@ fun GameScreen(onBack: () -> Unit) {
                     true
                 }
 
+                reproductor.setVolume(0.20f, 0.20f)
                 reproductor.start()
 
             } else {
@@ -1496,6 +1526,64 @@ fun GameScreen(onBack: () -> Unit) {
                             scaleX = 1.15f
                             scaleY = 1.15f
                         },
+                    contentScale = ContentScale.Crop,
+                    filterQuality = FilterQuality.None
+                )
+            }
+        }
+    }
+
+
+    // PANTALLA DE VICTORIA CON AUDIO
+    if (hasWon && mostrarVictoria) {
+
+        DisposableEffect(context) {
+
+            val reproductor = MediaPlayer.create(
+                context,
+                R.raw.victoria
+            )
+
+            if (reproductor != null) {
+
+                reproductor.setOnCompletionListener {
+                    mostrarVictoria = false
+                }
+
+                reproductor.setOnErrorListener { _, _, _ ->
+                    mostrarVictoria = false
+                    true
+                }
+
+                reproductor.start()
+
+            } else {
+                mostrarVictoria = false
+            }
+
+            onDispose {
+                reproductor?.release()
+            }
+        }
+
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                Image(
+                    bitmap = ImageBitmap.imageResource(
+                        R.drawable.victoria
+                    ),
+                    contentDescription = "Victoria: escapaste de la casa",
+                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
                     filterQuality = FilterQuality.None
                 )
