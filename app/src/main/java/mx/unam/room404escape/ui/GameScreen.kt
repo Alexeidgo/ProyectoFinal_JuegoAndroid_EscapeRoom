@@ -41,6 +41,13 @@ import androidx.compose.ui.unit.dp
 import android.util.Log
 import mx.unam.room404escape.data.Partida
 import mx.unam.room404escape.data.PartidasFirebaseRepository
+import mx.unam.room404escape.R
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.roundToInt
 
 private const val MAP_WIDTH = 12f
 private const val MAP_HEIGHT = 17.5f
@@ -972,6 +979,16 @@ fun GameScreen(onBack: () -> Unit) {
     )
 
     val playerColor = MaterialTheme.colorScheme.primary
+    val spriteLinterna = ImageBitmap.imageResource(R.drawable.linterna)
+    val spritesObjetos = listOf(
+        ImageBitmap.imageResource(R.drawable.llave),
+        ImageBitmap.imageResource(R.drawable.bateria),
+        ImageBitmap.imageResource(R.drawable.nota),
+        ImageBitmap.imageResource(R.drawable.engranaje),
+        ImageBitmap.imageResource(R.drawable.destornillador),
+        ImageBitmap.imageResource(R.drawable.tarjeta),
+        ImageBitmap.imageResource(R.drawable.fusible)
+    )
     val nearFinalDoor = doorways.any {
         it.kind == PortalKind.FINAL_ACCESS &&
             isNear(Offset(playerX, playerY), it.position, 1.7f)
@@ -999,14 +1016,58 @@ fun GameScreen(onBack: () -> Unit) {
             if (room == Room.FINAL_UPPER) {
                 drawCircle(Color(0xFFFF7B22), 0.32f * unit, finalMarker * unit)
             }
+
             collectibles.forEach { item ->
-                if (item.room == room && (collectedMask and (1 shl item.id)) == 0) {
-                    drawCircle(Color(0xFFAD62FF), 0.27f * unit, item.position * unit)
+                if (item.room == room &&
+                    (collectedMask and (1 shl item.id)) == 0
+                ) {
+                    val imagen = spritesObjetos[item.id]
+                    val centro = item.position * unit
+
+                    val ancho = (0.85f * unit)
+                        .roundToInt()
+                        .coerceAtLeast(1)
+
+                    val alto = (
+                            ancho * imagen.height.toFloat() /
+                                    imagen.width
+                            ).roundToInt().coerceAtLeast(1)
+
+                    drawImage(
+                        image = imagen,
+                        dstOffset = IntOffset(
+                            (centro.x - ancho / 2f).roundToInt(),
+                            (centro.y - alto / 2f).roundToInt()
+                        ),
+                        dstSize = IntSize(ancho, alto),
+                        filterQuality = FilterQuality.None
+                    )
                 }
             }
+
+
             if (room == Room.MAIN && !hasFlashlight) {
-                drawCircle(Color(0xFFFFD166), 0.22f * unit, flashlight * unit)
+                val centro = flashlight * unit
+
+                val ancho = (0.9f * unit).roundToInt()
+                    .coerceAtLeast(1)
+
+                val alto = (
+                        ancho * spriteLinterna.height.toFloat() /
+                                spriteLinterna.width
+                        ).roundToInt().coerceAtLeast(1)
+
+                drawImage(
+                    image = spriteLinterna,
+                    dstOffset = IntOffset(
+                        (centro.x - ancho / 2f).roundToInt(),
+                        (centro.y - alto / 2f).roundToInt()
+                    ),
+                    dstSize = IntSize(ancho, alto),
+                    filterQuality = FilterQuality.None
+                )
             }
+
             if (room == monsterRoom) {
                 val halfSize = PLAYER_RADIUS * unit
                 drawRect(
