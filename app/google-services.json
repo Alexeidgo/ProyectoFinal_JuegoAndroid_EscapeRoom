@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "168580104198",
+    "project_id": "room404escape",
+    "storage_bucket": "room404escape.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:168580104198:android:1f657d5a7c7beb4bce0387",
+        "android_client_info": {
+          "package_name": "mx.unam.room404escape"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCAzNzGALB6tyJhaFppHqfFNggGgjL3ss0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

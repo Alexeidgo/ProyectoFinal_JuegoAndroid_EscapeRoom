@@ -1,0 +1,38 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+    match /databases/{database}/documents {
+        match /partidas/{partidaId} {
+
+            allow read: if request.auth != null;
+
+            allow create: if request.auth != null
+                && request.resource.data.keys().hasAll([
+                    'jugador', 'puntuacion', 'tiempoSegundos',
+                    'objetos', 'resultado', 'fecha'
+                ])
+                && request.resource.data.keys().hasOnly([
+                    'jugador', 'puntuacion', 'tiempoSegundos',
+                    'objetos', 'resultado', 'fecha'
+                ])
+                && request.resource.data.jugador is string
+                && request.resource.data.jugador.size() > 0
+                && request.resource.data.jugador.size() <= 40
+                && request.resource.data.puntuacion is int
+                && request.resource.data.puntuacion >= 0
+                && request.resource.data.puntuacion <= 340000
+                && request.resource.data.tiempoSegundos is int
+                && request.resource.data.tiempoSegundos >= 0
+                && request.resource.data.objetos is int
+                && request.resource.data.objetos >= 0
+                && request.resource.data.objetos <= 8
+                && request.resource.data.resultado in [
+                    'victoria', 'derrota'
+                ]
+                && request.resource.data.fecha == request.time;
+
+            allow update, delete: if false;
+        }
+    }
+}
