@@ -48,6 +48,8 @@ import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
 
 private const val MAP_WIDTH = 12f
 private const val MAP_HEIGHT = 17.5f
@@ -320,13 +322,13 @@ private fun hitsWall(
 // Un solo monstruo, con la misma aparición inicial; recorre puertas verdes y escaleras.
 private val monsterSpawnRoom = Room.UPPER
 private val monsterSpawn = point(10.1f, 1.4f)
-private const val MONSTER_PATROL_BASE = 2.45f
+private const val MONSTER_PATROL_BASE = 2.8f
 private const val MONSTER_PATROL_PER_OBJECT = 0.12f
-private const val MONSTER_CHASE_BASE = 2.7f
+private const val MONSTER_CHASE_BASE = 3.6f
 private const val MONSTER_CHASE_PER_OBJECT = 0.12f
 private const val MONSTER_SIGHT_RANGE = 12f
 private const val MONSTER_CAPTURE_DISTANCE = 0.58f
-private const val MONSTER_DOOR_DELAY = 0.45f
+private const val MONSTER_DOOR_DELAY = 0.30f
 
 private fun monsterChaseSpeed(objects: Int) =
     MONSTER_CHASE_BASE + objects.coerceIn(0, TOTAL_OBJECTS) * MONSTER_CHASE_PER_OBJECT
@@ -338,9 +340,13 @@ private fun monsterPatrolSpeed(objects: Int) =
 private const val FINAL_PURSUIT_DELAY_MS = 4_000L
 private fun isFinalRoom(room: Room) = room == Room.FINAL_LOWER || room == Room.FINAL_UPPER
 
+
 private fun nextMonsterWarpDelay(objects: Int): Long =
-    if (objects >= 6) kotlin.random.Random.nextLong(8_000L, 12_001L)
-    else kotlin.random.Random.nextLong(12_000L, 18_001L)
+    if (objects >= 6) {
+        kotlin.random.Random.nextLong(5_000L, 8_001L)
+    } else {
+        kotlin.random.Random.nextLong(8_000L, 12_001L)
+    }
 
 // Primera puerta de la ruta más corta entre salas. También respeta el bloqueo rojo.
 private fun nextDoorToward(from: Room, goal: Room, objects: Int): Doorway? {
@@ -485,6 +491,9 @@ fun GameScreen(onBack: () -> Unit) {
     var hasLost by rememberSaveable { mutableStateOf(false) }
     var monsterX by rememberSaveable { mutableFloatStateOf(monsterSpawn.x) }
     var monsterY by rememberSaveable { mutableFloatStateOf(monsterSpawn.y) }
+    var monsterFacing by rememberSaveable {
+        mutableStateOf("abajo")
+    }
     var monsterRoomName by rememberSaveable { mutableStateOf(monsterSpawnRoom.name) }
     var monsterArrivalDoor by rememberSaveable { mutableStateOf<String?>(null) }
     var monsterRoamDoor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -862,6 +871,8 @@ fun GameScreen(onBack: () -> Unit) {
         val seesPlayer = roomName == monsterRoomName &&
             isNear(position, player, MONSTER_SIGHT_RANGE) &&
             clearSegment(position, player, walls, WALL_THICKNESS / 2f)
+        val detectaCercania = playerRoom == currentRoom &&
+                isNear(position, player, 4f)
         val allowedDoors = roomDoorways.getValue(currentRoom).filter {
             it.kind != PortalKind.FINAL_ACCESS || count == TOTAL_OBJECTS
         }
@@ -870,20 +881,21 @@ fun GameScreen(onBack: () -> Unit) {
             allowedDoors.firstOrNull { it.name == name }
         }
         if (monsterFollowDoor != null && followDoor == null) monsterFollowDoor = null
-        val pursuing = knowsPosition || seesPlayer || followDoor != null
+        val pursuing = knowsPosition || seesPlayer ||
+                detectaCercania || followDoor != null
         if (pursuing != monsterChasing) {
             brain.reset()
             monsterDoorWait = 0f
         }
         monsterChasing = pursuing
-        if (seesPlayer || tracksPlayerHere) {
+        if (seesPlayer || detectaCercania || tracksPlayerHere) {
             monsterFollowDoor = null
             monsterRoamDoor = null
             monsterDoorWait = 0f
         }
 
         var targetDoor: Doorway? = null
-        if (!seesPlayer && !tracksPlayerHere) {
+        if (!seesPlayer && !detectaCercania && !tracksPlayerHere) {
             targetDoor = if (knowsPosition) nextDoorToward(currentRoom, playerRoom, count) else followDoor
             if (targetDoor == null) {
                 targetDoor = allowedDoors.firstOrNull { it.name == monsterRoamDoor }
@@ -903,7 +915,8 @@ fun GameScreen(onBack: () -> Unit) {
                 }
             }
         }
-        val tracksMovingPlayer = seesPlayer || tracksPlayerHere
+        val tracksMovingPlayer = seesPlayer ||
+                detectaCercania || tracksPlayerHere
         val target = if (tracksMovingPlayer) player else targetDoor?.position ?: return
         val targetId = if (tracksMovingPlayer) "PLAYER" else targetDoor?.name
         if (targetId != monsterNavigationTarget) {
@@ -936,6 +949,19 @@ fun GameScreen(onBack: () -> Unit) {
             position = next
             remaining -= step
             if (step >= distance) brain.index++
+        }
+
+        val movimientoMonstruo = position - Offset(monsterX, monsterY)
+
+        if (movimientoMonstruo.getDistance() > 0.002f) {
+            monsterFacing = if (
+                kotlin.math.abs(movimientoMonstruo.x) >
+                kotlin.math.abs(movimientoMonstruo.y)
+            ) {
+                if (movimientoMonstruo.x > 0f) "derecha" else "izquierda"
+            } else {
+                if (movimientoMonstruo.y > 0f) "abajo" else "arriba"
+            }
         }
         monsterX = position.x
         monsterY = position.y
@@ -990,10 +1016,18 @@ fun GameScreen(onBack: () -> Unit) {
 
     val playerColor = MaterialTheme.colorScheme.primary
     val spriteLinterna = ImageBitmap.imageResource(R.drawable.linterna)
+    val spriteParedHorizontal =
+        ImageBitmap.imageResource(R.drawable.pared_horizontal)
+    val spriteParedVertical =
+        ImageBitmap.imageResource(R.drawable.pared_vertical)
     val spriteAbajo = ImageBitmap.imageResource(R.drawable.personaje_abajo)
     val spriteArriba = ImageBitmap.imageResource(R.drawable.personaje_arriba)
     val spriteIzquierda = ImageBitmap.imageResource(R.drawable.personaje_izquierda)
     val spriteDerecha = ImageBitmap.imageResource(R.drawable.personaje_derecha)
+    val monstruoAbajo = ImageBitmap.imageResource(R.drawable.monstruo_abajo)
+    val monstruoArriba = ImageBitmap.imageResource(R.drawable.monstruo_arriba)
+    val monstruoIzquierda = ImageBitmap.imageResource(R.drawable.monstruo_izquierda)
+    val monstruoDerecha = ImageBitmap.imageResource(R.drawable.monstruo_derecha)
     val spritePuerta1 = ImageBitmap.imageResource(R.drawable.puerta1)
     val spritePuerta2 = ImageBitmap.imageResource(R.drawable.puerta2)
     val spritePuerta3 = ImageBitmap.imageResource(R.drawable.puerta3)
@@ -1019,14 +1053,82 @@ fun GameScreen(onBack: () -> Unit) {
         ) {
             val unit = size.width / MAP_WIDTH
             drawRect(Color(0xFF221B20))
+
+            val grosorVisual = (0.38f * unit)
+                .roundToInt().coerceAtLeast(1)
+
+            val largoBloque = 0.8f * unit
+
             activeWalls.forEach { wall ->
-                drawLine(
-                    color = Color(0xFFA08E91),
-                    start = wall.start * unit,
-                    end = wall.end * unit,
-                    strokeWidth = WALL_THICKNESS * unit
-                )
+
+                val inicio = wall.start * unit
+                val final = wall.end * unit
+
+                val horizontal =
+                    kotlin.math.abs(inicio.y - final.y) < 0.5f
+
+                val imagen = if (horizontal) {
+                    spriteParedHorizontal
+                } else {
+                    spriteParedVertical
+                }
+
+                val desde = if (horizontal) {
+                    minOf(inicio.x, final.x)
+                } else {
+                    minOf(inicio.y, final.y)
+                }
+
+                val hasta = if (horizontal) {
+                    maxOf(inicio.x, final.x)
+                } else {
+                    maxOf(inicio.y, final.y)
+                }
+
+                val centro = if (horizontal) inicio.y else inicio.x
+
+                var posicion = desde
+
+                while (posicion < hasta - 0.001f) {
+
+                    val siguiente = minOf(
+                        posicion + largoBloque,
+                        hasta
+                    )
+
+                    val inicioPx = posicion.roundToInt()
+                    val largoPx = (siguiente.roundToInt() - inicioPx)
+                        .coerceAtLeast(1)
+
+                    val offset = if (horizontal) {
+                        IntOffset(
+                            inicioPx,
+                            (centro - grosorVisual / 2f).roundToInt()
+                        )
+                    } else {
+                        IntOffset(
+                            (centro - grosorVisual / 2f).roundToInt(),
+                            inicioPx
+                        )
+                    }
+
+                    val dimensiones = if (horizontal) {
+                        IntSize(largoPx, grosorVisual)
+                    } else {
+                        IntSize(grosorVisual, largoPx)
+                    }
+
+                    drawImage(
+                        image = imagen,
+                        dstOffset = offset,
+                        dstSize = dimensiones,
+                        filterQuality = FilterQuality.None
+                    )
+
+                    posicion = siguiente
+                }
             }
+
 
 
             doorways.forEach { doorway ->
@@ -1116,12 +1218,95 @@ fun GameScreen(onBack: () -> Unit) {
                 )
             }
 
+
             if (room == monsterRoom) {
-                val halfSize = PLAYER_RADIUS * unit
-                drawRect(
-                    color = if (monsterChasing) Color(0xFFFF3030) else Color(0xFFB93B48),
-                    topLeft = Offset(monsterX, monsterY) * unit - Offset(halfSize, halfSize),
-                    size = androidx.compose.ui.geometry.Size(halfSize * 2f, halfSize * 2f)
+
+                val imagenMonstruo = when (monsterFacing) {
+                    "arriba" -> monstruoArriba
+                    "izquierda" -> monstruoIzquierda
+                    "derecha" -> monstruoDerecha
+                    else -> monstruoAbajo
+                }
+
+                val centro = Offset(monsterX, monsterY) * unit
+
+                val ancho = (1.0f * unit)
+                    .roundToInt()
+                    .coerceAtLeast(1)
+
+                val alto = (
+                        ancho * imagenMonstruo.height.toFloat() /
+                                imagenMonstruo.width
+                        ).roundToInt().coerceAtLeast(1)
+
+                drawImage(
+                    image = imagenMonstruo,
+                    dstOffset = IntOffset(
+                        (centro.x - ancho / 2f).roundToInt(),
+                        (centro.y - alto / 2f).roundToInt()
+                    ),
+                    dstSize = IntSize(ancho, alto),
+                    filterQuality = FilterQuality.None
+                )
+            }
+
+
+
+            if (hasFlashlight) {
+
+                val origen = Offset(playerX, playerY) * unit
+
+                val direccion = when (playerFacing) {
+                    "arriba" -> Offset(0f, -1f)
+                    "abajo" -> Offset(0f, 1f)
+                    "izquierda" -> Offset(-1f, 0f)
+                    else -> Offset(1f, 0f)
+                }
+
+                val lateral = Offset(-direccion.y, direccion.x)
+
+                val inicio = origen + direccion * (0.3f * unit)
+                val fin = origen + direccion * (2.0f * unit)
+                val ancho = 1.2f * unit
+
+                // Forma del haz de la linterna.
+                val haz = Path().apply {
+                    moveTo(inicio.x, inicio.y)
+
+                    val lado1 = fin + lateral * ancho
+                    val lado2 = fin - lateral * ancho
+
+                    lineTo(lado1.x, lado1.y)
+                    lineTo(lado2.x, lado2.y)
+                    close()
+                }
+
+                // Luz tenue que se desvanece a distancia.
+                drawPath(
+                    path = haz,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color(0x70FFF4C4),
+                            Color(0x08FFF4C4)
+                        ),
+                        start = inicio,
+                        end = fin
+                    )
+                )
+
+                // Difuminación en la parte delantera.
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0x45FFF1BC),
+                            Color(0x15FFE7A0),
+                            Color.Transparent
+                        ),
+                        center = fin,
+                        radius = 1.6f * unit
+                    ),
+                    radius = 1.6f * unit,
+                    center = fin
                 )
             }
 
