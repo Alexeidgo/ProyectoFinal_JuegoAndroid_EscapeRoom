@@ -1152,6 +1152,13 @@ private class AudioJuego(context: Context) {
         )
     }
 
+    fun pausarEfectos() {
+        soundPool.autoPause()
+    }
+
+    fun reanudarEfectos() {
+        soundPool.autoResume()
+    }
     fun liberar() {
         soundPool.release()
     }
@@ -1203,6 +1210,9 @@ fun GameScreen(onBack: () -> Unit) {
     var monsterFacing by rememberSaveable {
         mutableStateOf("abajo")
     }
+    var mostrarVictoria by rememberSaveable {
+        mutableStateOf(false)
+    }
     var monsterRoomName by rememberSaveable { mutableStateOf(monsterSpawnRoom.name) }
     var monsterArrivalDoor by rememberSaveable { mutableStateOf<String?>(null) }
     var monsterRoamDoor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1239,6 +1249,7 @@ fun GameScreen(onBack: () -> Unit) {
     val collectedCount = Integer.bitCount(collectedMask) + if (hasFlashlight) 1 else 0
 
     fun restart() {
+        audioJuego.reanudarEfectos()
         roomName = Room.MAIN.name
         playerX = entrance.x
         playerY = entrance.y
@@ -1247,6 +1258,7 @@ fun GameScreen(onBack: () -> Unit) {
         hasWon = false
         hasLost = false
         mostrarScreamer = false
+        mostrarVictoria = false
         monsterX = monsterSpawn.x
         monsterY = monsterSpawn.y
         monsterRoomName = monsterSpawnRoom.name
@@ -1309,8 +1321,12 @@ fun GameScreen(onBack: () -> Unit) {
         // Finalizar la partida
 
         joystickDirection = Offset.Zero
+        if (escaped) {
+            audioJuego.pausarEfectos()
+        }
         hasWon = escaped
         hasLost = !escaped
+        mostrarVictoria = escaped
 
 // Mostrar screamer solamente cuando perdemos
         mostrarScreamer = !escaped
@@ -1443,6 +1459,7 @@ fun GameScreen(onBack: () -> Unit) {
                     true
                 }
 
+                reproductor.setVolume(0.20f, 0.20f)
                 reproductor.start()
 
             } else {
@@ -1496,6 +1513,64 @@ fun GameScreen(onBack: () -> Unit) {
                             scaleX = 1.15f
                             scaleY = 1.15f
                         },
+                    contentScale = ContentScale.Crop,
+                    filterQuality = FilterQuality.None
+                )
+            }
+        }
+    }
+
+
+    // PANTALLA DE VICTORIA CON AUDIO
+    if (hasWon && mostrarVictoria) {
+
+        DisposableEffect(context) {
+
+            val reproductor = MediaPlayer.create(
+                context,
+                R.raw.victoria
+            )
+
+            if (reproductor != null) {
+
+                reproductor.setOnCompletionListener {
+                    mostrarVictoria = false
+                }
+
+                reproductor.setOnErrorListener { _, _, _ ->
+                    mostrarVictoria = false
+                    true
+                }
+
+                reproductor.start()
+
+            } else {
+                mostrarVictoria = false
+            }
+
+            onDispose {
+                reproductor?.release()
+            }
+        }
+
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                Image(
+                    bitmap = ImageBitmap.imageResource(
+                        R.drawable.victoria
+                    ),
+                    contentDescription = "Victoria: escapaste de la casa",
+                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
                     filterQuality = FilterQuality.None
                 )
