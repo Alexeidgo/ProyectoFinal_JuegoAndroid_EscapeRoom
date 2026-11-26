@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.IntSize
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipRect
 
 private const val MAP_WIDTH = 12f
 private const val MAP_HEIGHT = 17.5f
@@ -93,6 +94,484 @@ private const val PICKUP_RADIUS = 0.55f
 
 // La linterna tiene un estado independiente para su futura función de iluminación.
 // Los siete objetos genéricos conservan una identidad propia aunque se vean iguales.
+
+private data class Decoracion(
+    val sala: Room,
+    val imagen: Int,
+    val posicion: Offset,
+    val ancho: Float,
+    val alto: Float,
+    val anchoColision: Float = 0f,
+    val altoColision: Float = 0f
+)
+
+private val decoraciones = listOf(
+    // Librero en la zona superior izquierda
+    Decoracion(
+        Room.MAIN, R.drawable.librero,
+        point(2.35f, 2.1f),
+        2.8f, 2.4f,
+        1.1f, 1.5f
+    ),
+
+    // Mesa en la zona superior derecha
+    Decoracion(
+        Room.MAIN, R.drawable.mesa,
+        point(9.2f, 5.1f),
+        2.7f, 2.4f,
+        1.35f, 0.85f
+    ),
+
+    // Cajas en la zona inferior derecha
+    Decoracion(
+        Room.MAIN, R.drawable.cajas,
+        point(9.6f, 10.5f),
+        2.6f, 2.6f,
+        1.0f, 1.2f
+    ),
+
+    // Papeles en el pasillo central (sin colision)
+    Decoracion(
+        Room.MAIN, R.drawable.papeles,
+        point(6f, 6.2f),
+        2.2f, 2.0f
+    ),
+
+    // SALA DE ESTAR
+
+    // Alfombra central (sin colision)
+    Decoracion(
+    Room.LIVING, R.drawable.alfombra,
+    point(6f, 4.1f),
+    3.8f, 2.8f
+    ),
+
+    // Sofa antiguo
+    Decoracion(
+    Room.LIVING, R.drawable.sofa,
+    point(6f, 2.7f),
+    3.2f, 2.0f,
+    1.9f, 0.9f
+    ),
+
+    // Mesa de centro
+    Decoracion(
+    Room.LIVING, R.drawable.mesa,
+    point(6f, 4.7f),
+    2.0f, 1.6f,
+    1.0f, 0.7f
+    ),
+
+    // Sillon individual
+    Decoracion(
+    Room.LIVING, R.drawable.sillon,
+    point(9.1f, 3.8f),
+    1.9f, 2.1f,
+    0.9f, 1.0f
+    ),
+
+    // DORMITORIO
+
+    // Cama antigua
+    Decoracion(
+        Room.BEDROOM, R.drawable.cama,
+        point(5.4f, 1.7f),
+        2.4f, 2.0f,
+        1.35f, 1.05f
+    ),
+
+    // Buro junto a la cama
+    Decoracion(
+        Room.BEDROOM, R.drawable.buro,
+        point(7.4f, 1.65f),
+        1.2f, 1.2f,
+        0.55f, 0.5f
+    ),
+
+    // Armario antiguo
+    Decoracion(
+        Room.BEDROOM, R.drawable.armario,
+        point(10.1f, 5.4f),
+        2.0f, 2.4f,
+        0.9f, 1.1f
+    ),
+
+    // Alfombra desgastada
+    Decoracion(
+        Room.BEDROOM, R.drawable.alfombra,
+        point(5.4f, 8.8f),
+        2.8f, 2.0f
+    ),
+
+    // COBERTIZO
+
+    // Mesa de trabajo
+    Decoracion(
+        Room.SHED, R.drawable.mesa,
+        point(2.1f, 2.1f),
+        2.3f, 1.8f,
+        1.1f, 0.65f
+    ),
+
+    // Cajas apiladas en la parte inferior
+    Decoracion(
+        Room.SHED, R.drawable.cajas,
+        point(2.2f, 10.7f),
+        2.0f, 2.0f,
+        0.95f, 1.0f
+    ),
+
+    // Cajas en el extremo derecho
+    Decoracion(
+        Room.SHED, R.drawable.cajas,
+        point(10f, 10f),
+        1.8f, 1.8f,
+        0.85f, 0.8f
+    ),
+
+    // Papeles tirados por el suelo
+    Decoracion(
+        Room.SHED, R.drawable.papeles,
+        point(6.4f, 4.3f),
+        1.9f, 1.6f
+    ),
+
+
+    // VESTIBULO IZQUIERDO
+
+    // Librero antiguo
+    Decoracion(
+        Room.LEFT, R.drawable.librero,
+        point(2.2f, 2.3f),
+        2.5f, 2.2f,
+        1.1f, 1.3f
+    ),
+
+    // Sillon abandonado
+    Decoracion(
+        Room.LEFT, R.drawable.sillon,
+        point(2.1f, 5f),
+        1.8f, 2.0f,
+        0.85f, 1.0f
+    ),
+
+    // Cajas apiladas
+    Decoracion(
+        Room.LEFT, R.drawable.cajas,
+        point(9.2f, 7.7f),
+        2.0f, 2.0f,
+        0.9f, 1.0f
+    ),
+
+    // Papeles esparcidos
+    Decoracion(
+        Room.LEFT, R.drawable.papeles,
+        point(6.2f, 11.4f),
+        2.0f, 1.6f
+    ),
+
+    // VESTIBULO DERECHO
+
+    // Librero en la parte superior derecha
+    Decoracion(
+        Room.RIGHT, R.drawable.librero,
+        point(9.6f, 2.2f),
+        2.1f, 2.0f,
+        0.95f, 0.95f
+    ),
+
+    // Sillon antiguo
+    Decoracion(
+        Room.RIGHT, R.drawable.sillon,
+        point(2f, 6.3f),
+        1.9f, 2.0f,
+        0.85f, 1.0f
+    ),
+
+    // Cajas abandonadas
+    Decoracion(
+        Room.RIGHT, R.drawable.cajas,
+        point(9.6f, 10.5f),
+        2.2f, 2.2f,
+        0.95f, 1.0f
+    ),
+
+    // Papeles tirados en el suelo
+    Decoracion(
+        Room.RIGHT, R.drawable.papeles,
+        point(5.2f, 11.5f),
+        2.0f, 1.6f
+    ),
+
+    // =========================================
+    // VESTIBULO DERECHO
+    // =========================================
+
+    Decoracion(
+        Room.RIGHT, R.drawable.librero,
+        point(9.6f, 2.2f),
+        2.1f, 2.0f,
+        0.95f, 0.95f
+    ),
+
+    Decoracion(
+        Room.RIGHT, R.drawable.sillon,
+        point(2f, 6.3f),
+        1.9f, 2.0f,
+        0.85f, 1.0f
+    ),
+
+    Decoracion(
+        Room.RIGHT, R.drawable.cajas,
+        point(9.6f, 10.5f),
+        2.2f, 2.2f,
+        0.95f, 1.0f
+    ),
+
+    Decoracion(
+        Room.RIGHT, R.drawable.papeles,
+        point(5.2f, 11.5f),
+        2.0f, 1.6f
+    ),
+
+
+    // =========================================
+    // SALON SUPERIOR
+    // =========================================
+
+    // Papeles en el suelo
+    Decoracion(
+        Room.UPPER, R.drawable.papeles,
+        point(4.2f, 12f),
+        1.8f, 1.4f
+    ),
+
+    // Escombros abandonados
+    Decoracion(
+        Room.UPPER, R.drawable.escombros,
+        point(10.4f, 6f),
+        1.6f, 1.5f
+    ),
+
+    // Librero antiguo
+    Decoracion(
+        Room.UPPER, R.drawable.librero,
+        point(4.6f, 6.3f),
+        2.5f, 2.2f,
+        1.0f, 1.0f
+    ),
+
+    // Mesa de trabajo
+    Decoracion(
+        Room.UPPER, R.drawable.mesa_trabajo,
+        point(6.6f, 5.2f),
+        2.2f, 1.7f,
+        1.0f, 0.65f
+    ),
+
+
+    // =========================================
+    // PASADIZO 1
+    // =========================================
+
+    // Papeles viejos
+    Decoracion(
+        Room.PASSAGE_1, R.drawable.papeles,
+        point(6.3f, 2.1f),
+        1.6f, 1.5f
+    ),
+
+    // Escombros en el pasillo
+    Decoracion(
+        Room.PASSAGE_1, R.drawable.escombros,
+        point(10.1f, 6.3f),
+        1.6f, 1.5f
+    ),
+
+    // Barril oxidado
+    Decoracion(
+        Room.PASSAGE_1, R.drawable.barril,
+        point(2.1f, 6f),
+        1.4f, 1.6f,
+        0.7f, 0.8f
+    ),
+
+    // Cajas abandonadas
+    Decoracion(
+        Room.PASSAGE_1, R.drawable.cajas,
+        point(6.3f, 8f),
+        1.8f, 1.8f,
+        0.7f, 0.8f
+    ),
+
+
+    // =========================================
+    // PASADIZO 2
+    // =========================================
+
+    // Papeles tirados
+    Decoracion(
+        Room.PASSAGE_2, R.drawable.papeles,
+        point(7.6f, 1.7f),
+        1.7f, 1.3f
+    ),
+
+    // Escombros en el suelo
+    Decoracion(
+        Room.PASSAGE_2, R.drawable.escombros,
+        point(4.8f, 6.5f),
+        1.5f, 1.2f
+    ),
+
+    // Barril abandonado
+    Decoracion(
+        Room.PASSAGE_2, R.drawable.barril,
+        point(1.7f, 4.1f),
+        1.3f, 1.5f,
+        0.55f, 0.55f
+    ),
+
+    // Mesa de herramientas
+    Decoracion(
+        Room.PASSAGE_2, R.drawable.mesa_trabajo,
+        point(6.2f, 12.6f),
+        2.2f, 1.7f,
+        0.95f, 0.5f
+    ),
+
+
+    // =========================================
+    // SALON TRASERO
+    // =========================================
+
+    // Papeles esparcidos
+    Decoracion(
+        Room.REAR, R.drawable.papeles,
+        point(4.3f, 9.2f),
+        2.0f, 1.5f
+    ),
+
+    // Armario antiguo
+    Decoracion(
+        Room.REAR, R.drawable.armario,
+        point(2.1f, 3.4f),
+        2.0f, 2.4f,
+        0.85f, 1.1f
+    ),
+
+    // Silla abandonada
+    Decoracion(
+        Room.REAR, R.drawable.silla,
+        point(8.6f, 4.6f),
+        1.4f, 1.5f,
+        0.55f, 0.6f
+    ),
+
+    // Baul viejo
+    Decoracion(
+        Room.REAR, R.drawable.baul,
+        point(8.6f, 7.8f),
+        1.7f, 1.5f,
+        0.7f, 0.6f
+    ),
+
+
+    // =========================================
+    // ATICO
+    // =========================================
+
+    // Papeles antiguos
+    Decoracion(
+        Room.ATTIC, R.drawable.papeles,
+        point(5.7f, 1.5f),
+        1.8f, 1.3f
+    ),
+
+    // Escombros
+    Decoracion(
+        Room.ATTIC, R.drawable.escombros,
+        point(1.8f, 5.1f),
+        1.5f, 1.5f
+    ),
+
+    // Baul antiguo
+    Decoracion(
+        Room.ATTIC, R.drawable.baul,
+        point(3.6f, 11.55f),
+        1.7f, 1.5f,
+        0.65f, 0.55f
+    ),
+
+    // Mesa de trabajo
+    Decoracion(
+        Room.ATTIC, R.drawable.mesa_trabajo,
+        point(9.9f, 9.7f),
+        2.2f, 1.7f,
+        0.95f, 0.6f
+    ),
+
+
+    // =========================================
+    // CORREDOR FINAL - TRAMO 1
+    // =========================================
+
+    // Solo decoraciones sin colision
+    // para mantener libre el recorrido
+
+    Decoracion(
+        Room.FINAL_LOWER, R.drawable.papeles,
+        point(6.3f, 4f),
+        1.8f, 1.3f
+    ),
+
+    Decoracion(
+        Room.FINAL_LOWER, R.drawable.escombros,
+        point(2f, 9.6f),
+        1.4f, 1.4f
+    ),
+
+    Decoracion(
+        Room.FINAL_LOWER, R.drawable.papeles,
+        point(10.1f, 7f),
+        1.3f, 1.0f
+    ),
+
+
+    // =========================================
+    // CORREDOR FINAL - TRAMO 2
+    // =========================================
+
+    // Sin obstaculos solidos para no
+    // bloquear la persecucion final
+
+    Decoracion(
+        Room.FINAL_UPPER, R.drawable.papeles,
+        point(10.1f, 9f),
+        1.4f, 1.1f
+    ),
+
+    Decoracion(
+        Room.FINAL_UPPER, R.drawable.escombros,
+        point(6.35f, 5f),
+        1.4f, 1.2f
+    ),
+
+    Decoracion(
+        Room.FINAL_UPPER, R.drawable.papeles,
+        point(1.65f, 10.8f),
+        1.4f, 1.1f
+    ),
+
+    Decoracion(
+        Room.FINAL_UPPER, R.drawable.escombros,
+        point(2f, 5.05f),
+        1.4f, 1.3f
+    )
+
+
+
+)
+
 private data class Collectible(val id: Int, val room: Room, val position: Offset)
 private val collectibles = listOf(
     Collectible(0, Room.MAIN, point(1.35f, 6.25f)),
@@ -212,12 +691,37 @@ private val roomWalls = mapOf(
     )
 )
 
+private val roomCollisionWalls = roomWalls.mapValues { (sala, paredes) ->
+
+    val obstaculos = decoraciones
+        .filter {
+            it.sala == sala &&
+                    it.anchoColision > 0f &&
+                    it.altoColision > 0f
+        }
+        .flatMap { objeto ->
+
+            val x1 = objeto.posicion.x - objeto.anchoColision / 2f
+            val x2 = objeto.posicion.x + objeto.anchoColision / 2f
+            val y1 = objeto.posicion.y - objeto.altoColision / 2f
+            val y2 = objeto.posicion.y + objeto.altoColision / 2f
+
+            listOf(
+                Wall(Offset(x1, y1), Offset(x2, y1)),
+                Wall(Offset(x2, y1), Offset(x2, y2)),
+                Wall(Offset(x2, y2), Offset(x1, y2)),
+                Wall(Offset(x1, y2), Offset(x1, y1))
+            )
+        }
+
+    paredes + obstaculos
+}
+
 private enum class PortalKind(val color: Color) {
     ROOM(Color(0xFFADFAB5)),
     STAIRS(Color(0xFF37B7FB)),
     FINAL_ACCESS(Color(0xFFFF4242))
 }
-
 private enum class Doorway(
     val room: Room,
     val position: Offset,
@@ -381,7 +885,7 @@ private fun clearSegment(from: Offset, to: Offset, walls: List<Wall>, clearance:
 // Una cuadrícula pequeña se construye una vez; BFS evita que la patrulla se atasque
 // al volver de una persecución. No se recalcula la ruta en cada fotograma.
 private class MonsterBrain(room: Room) {
-    private val walls = roomWalls.getValue(room)
+    private val walls = roomCollisionWalls.getValue(room)
     private val clearance = PLAYER_RADIUS + WALL_THICKNESS / 2f
     private val columns = 31
     private val rows = 45
@@ -637,7 +1141,7 @@ fun GameScreen(onBack: () -> Unit) {
         if (roomName == monsterRoomName &&
             isNear(Offset(playerX, playerY), Offset(monsterX, monsterY), MONSTER_CAPTURE_DISTANCE) &&
             clearSegment(Offset(playerX, playerY), Offset(monsterX, monsterY),
-                roomWalls.getValue(Room.valueOf(monsterRoomName)), WALL_THICKNESS / 2f)) {
+                roomCollisionWalls.getValue(Room.valueOf(monsterRoomName)), WALL_THICKNESS / 2f)) {
             finishGame(false)
         }
     }
@@ -744,7 +1248,7 @@ fun GameScreen(onBack: () -> Unit) {
     fun move(dx: Float, dy: Float) {
         if (!gameStarted || hasWon || hasLost || !windowFocused) return
         val currentRoom = Room.valueOf(roomName)
-        val walls = roomWalls.getValue(currentRoom)
+        val walls = roomCollisionWalls.getValue(currentRoom)
         val previous = Offset(playerX, playerY)
         // Se resuelve cada eje por separado para deslizarse junto a las paredes.
         var next = previous
@@ -862,7 +1366,7 @@ fun GameScreen(onBack: () -> Unit) {
                 }
             }
         }
-        val walls = roomWalls.getValue(currentRoom)
+        val walls = roomCollisionWalls.getValue(currentRoom)
         val brain = brainFor(currentRoom)
         var position = Offset(monsterX, monsterY)
         val player = Offset(playerX, playerY)
@@ -1016,6 +1520,25 @@ fun GameScreen(onBack: () -> Unit) {
 
     val playerColor = MaterialTheme.colorScheme.primary
     val spriteLinterna = ImageBitmap.imageResource(R.drawable.linterna)
+    val spritesDecoracion = mapOf(
+        R.drawable.librero to ImageBitmap.imageResource(R.drawable.librero),
+        R.drawable.mesa to ImageBitmap.imageResource(R.drawable.mesa),
+        R.drawable.cajas to ImageBitmap.imageResource(R.drawable.cajas),
+        R.drawable.papeles to ImageBitmap.imageResource(R.drawable.papeles),
+        R.drawable.sofa to ImageBitmap.imageResource(R.drawable.sofa),
+        R.drawable.sillon to ImageBitmap.imageResource(R.drawable.sillon),
+        R.drawable.alfombra to ImageBitmap.imageResource(R.drawable.alfombra),
+        R.drawable.cama to ImageBitmap.imageResource(R.drawable.cama),
+        R.drawable.buro to ImageBitmap.imageResource(R.drawable.buro),
+        R.drawable.armario to ImageBitmap.imageResource(R.drawable.armario),
+        R.drawable.barril to ImageBitmap.imageResource(R.drawable.barril),
+        R.drawable.baul to ImageBitmap.imageResource(R.drawable.baul),
+        R.drawable.mesa_trabajo to ImageBitmap.imageResource(R.drawable.mesa_trabajo),
+        R.drawable.silla to ImageBitmap.imageResource(R.drawable.silla),
+        R.drawable.escombros to ImageBitmap.imageResource(R.drawable.escombros)
+
+    )
+    val spriteSuelo = ImageBitmap.imageResource(R.drawable.suelo_piedra)
     val spriteParedHorizontal =
         ImageBitmap.imageResource(R.drawable.pared_horizontal)
     val spriteParedVertical =
@@ -1053,6 +1576,36 @@ fun GameScreen(onBack: () -> Unit) {
         ) {
             val unit = size.width / MAP_WIDTH
             drawRect(Color(0xFF221B20))
+
+            val tamanoBaldosa = (4f * unit)
+                .roundToInt()
+                .coerceAtLeast(1)
+
+// Dibujar el suelo antes de las paredes y los objetos.
+            clipRect {
+                var y = 0
+
+                while (y < size.height) {
+                    var x = 0
+
+                    while (x < size.width) {
+                        drawImage(
+                            image = spriteSuelo,
+                            dstOffset = IntOffset(x, y),
+                            dstSize = IntSize(
+                                tamanoBaldosa,
+                                tamanoBaldosa
+                            ),
+                            filterQuality = FilterQuality.None
+                        )
+
+                        x += tamanoBaldosa
+                    }
+
+                    y += tamanoBaldosa
+                }
+            }
+
 
             val grosorVisual = (0.38f * unit)
                 .roundToInt().coerceAtLeast(1)
@@ -1129,6 +1682,28 @@ fun GameScreen(onBack: () -> Unit) {
                 }
             }
 
+
+            decoraciones.filter { it.sala == room }.forEach { objeto ->
+
+                val imagen = spritesDecoracion.getValue(objeto.imagen)
+                val centro = objeto.posicion * unit
+
+                val ancho = (objeto.ancho * unit)
+                    .roundToInt().coerceAtLeast(1)
+
+                val alto = (objeto.alto * unit)
+                    .roundToInt().coerceAtLeast(1)
+
+                drawImage(
+                    image = imagen,
+                    dstOffset = IntOffset(
+                        (centro.x - ancho / 2f).roundToInt(),
+                        (centro.y - alto / 2f).roundToInt()
+                    ),
+                    dstSize = IntSize(ancho, alto),
+                    filterQuality = FilterQuality.None
+                )
+            }
 
 
             doorways.forEach { doorway ->
