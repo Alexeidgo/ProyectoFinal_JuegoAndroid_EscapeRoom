@@ -62,6 +62,14 @@ import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.IconButton
+import android.view.SoundEffectConstants
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 private const val MAP_WIDTH = 12f
 private const val MAP_HEIGHT = 17.5f
@@ -837,11 +845,32 @@ private fun hitsWall(
 // Un solo monstruo, con la misma aparición inicial; recorre puertas verdes y escaleras.
 private val monsterSpawnRoom = Room.UPPER
 private val monsterSpawn = point(10.1f, 1.4f)
-private const val MONSTER_PATROL_BASE = 2.8f
-private const val MONSTER_PATROL_PER_OBJECT = 0.12f
-private const val MONSTER_CHASE_BASE = 3.6f
-private const val MONSTER_CHASE_PER_OBJECT = 0.12f
-private const val MONSTER_SIGHT_RANGE = 12f
+private const val MONSTER_PATROL_BASE = 2.1f
+
+private const val MONSTER_DARK_SPEED_PER_SECOND = 0.07f
+private const val MONSTER_PATROL_PER_OBJECT = 0.08f
+private const val MONSTER_CHASE_BASE = 2.8f
+private const val MONSTER_CHASE_PER_OBJECT = 0.11f
+
+private const val MONSTER_SEARCH_TIME_MS = 3_000L
+
+
+private const val MONSTER_SIGHT_LIT = 6f
+private const val MONSTER_BEAM_DETECTION_RANGE = 9f
+private const val MONSTER_BEAM_HALF_ANGLE_COS = 0.866f // 30° a cada lado
+private const val MONSTER_SIGHT_DARK = 2f
+
+private const val MONSTER_PICKUP_ALERT_MS = 5_000L
+
+private const val FLASHLIGHT_CAPACITY = 30f
+private const val FLASHLIGHT_MIN_CHARGE = 4f
+private const val FLASHLIGHT_RECHARGE_RATE = 1f
+private const val FLASHLIGHT_RECOVERY_CHARGE = FLASHLIGHT_CAPACITY * 0.5f
+private const val DARKNESS_WARNING = 16f
+private const val DARKNESS_LIMIT = 24f
+private const val DARKNESS_TRACKING_TIME = 20f
+
+
 private const val MONSTER_CAPTURE_DISTANCE = 0.58f
 private const val MONSTER_DOOR_DELAY = 0.30f
 
@@ -1165,8 +1194,46 @@ private class AudioJuego(context: Context) {
 }
 
 @Composable
+internal fun BackgroundMusic(track: Int, volume: Float) {
+    val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val currentVolume by rememberUpdatedState(volume)
+    val scope = rememberCoroutineScope()
 
-fun GameScreen(onBack: () -> Unit) {
+    DisposableEffect(context, lifecycle, track) {
+        val player = MediaPlayer.create(context, track)
+
+        player?.isLooping = true
+        player?.setVolume(currentVolume, currentVolume)
+
+        val volumeJob = scope.launch {
+            snapshotFlow { currentVolume }.collect { level ->
+                player?.setVolume(level, level)
+            }
+        }
+
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> player?.start()
+                Lifecycle.Event.ON_PAUSE -> {
+                    if (player?.isPlaying == true) player.pause()
+                }
+                else -> Unit
+            }
+        }
+
+        lifecycle.addObserver(observer)
+
+        onDispose {
+            volumeJob.cancel()
+            lifecycle.removeObserver(observer)
+            player?.release()
+        }
+    }
+}
+@Composable
+fun GameScreen(onBack: () -> Unit,
+               onMusicTrackChanged: (Int?) -> Unit) {
     var gameStarted by rememberSaveable { mutableStateOf(false) }
     var nameDraft by rememberSaveable { mutableStateOf("") }
     var playerName by rememberSaveable { mutableStateOf("") }
@@ -1199,9 +1266,15 @@ fun GameScreen(onBack: () -> Unit) {
     var playerY by rememberSaveable { mutableFloatStateOf(entrance.y) }
     var playerFacing by rememberSaveable { mutableStateOf("abajo") }
     var hasFlashlight by rememberSaveable { mutableStateOf(false) }
+    var flashlightOn by rememberSaveable { mutableStateOf(false) }
+    var flashlightCharge by rememberSaveable { mutableFloatStateOf(FLASHLIGHT_CAPACITY) }
+    var flashlightDepleted by rememberSaveable { mutableStateOf(false) }
+    var darknessSeconds by rememberSaveable { mutableFloatStateOf(0f) }
+    var darknessTrackingSeconds by rememberSaveable { mutableFloatStateOf(0f) }
     var collectedMask by rememberSaveable { mutableIntStateOf(0) }
     var hasWon by rememberSaveable { mutableStateOf(false) }
     var hasLost by rememberSaveable { mutableStateOf(false) }
+
     var mostrarScreamer by rememberSaveable {
         mutableStateOf(false)
     }
@@ -1219,6 +1292,9 @@ fun GameScreen(onBack: () -> Unit) {
     var monsterFollowDoor by rememberSaveable { mutableStateOf<String?>(null) }
     var monsterDoorWait by rememberSaveable { mutableFloatStateOf(0f) }
     var monsterChasing by remember { mutableStateOf(false) }
+    var monsterLastSeenPosition by remember { mutableStateOf<Offset?>(null) }
+    var monsterLastSeenUntil by remember { mutableLongStateOf(0L) }
+    var monsterPickupAlertUntil by rememberSaveable { mutableLongStateOf(0L) }
     var monsterNavigationTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var nextMonsterWarpAt by rememberSaveable { mutableLongStateOf(0L) }
     var finalEntryAt by rememberSaveable { mutableLongStateOf(0L) }
@@ -1247,13 +1323,29 @@ fun GameScreen(onBack: () -> Unit) {
         }
     }
     val collectedCount = Integer.bitCount(collectedMask) + if (hasFlashlight) 1 else 0
+    val nightmarePhase = collectedCount == TOTAL_OBJECTS
 
+    SideEffect {
+        onMusicTrackChanged(
+            when {
+                hasWon || hasLost -> null
+                !gameStarted -> R.raw.musica_menu
+                nightmarePhase -> R.raw.pesadilla_final
+                else -> R.raw.ambiente_juego
+            }
+        )
+    }
     fun restart() {
         audioJuego.reanudarEfectos()
         roomName = Room.MAIN.name
         playerX = entrance.x
         playerY = entrance.y
         hasFlashlight = false
+        flashlightOn = false
+        flashlightCharge = FLASHLIGHT_CAPACITY
+        flashlightDepleted = false
+        darknessSeconds = 0f
+        darknessTrackingSeconds = 0f
         collectedMask = 0
         hasWon = false
         hasLost = false
@@ -1267,6 +1359,8 @@ fun GameScreen(onBack: () -> Unit) {
         monsterFollowDoor = null
         monsterDoorWait = 0f
         monsterChasing = false
+        monsterPickupAlertUntil = 0L
+        monsterLastSeenPosition = null
         monsterNavigationTarget = null
         nextMonsterWarpAt = SystemClock.elapsedRealtime() + nextMonsterWarpDelay(0)
         finalEntryAt = 0L
@@ -1383,6 +1477,7 @@ fun GameScreen(onBack: () -> Unit) {
         monsterFollowDoor = null
         monsterDoorWait = 0f
         monsterChasing = false
+        monsterLastSeenPosition = null
         monsterNavigationTarget = null
         monsterVisits = monsterVisits + (arrival.room.name to
             ((monsterVisits[arrival.room.name] ?: 0) + 1))
@@ -1587,8 +1682,14 @@ fun GameScreen(onBack: () -> Unit) {
         ) {
             Text(if (hasWon) "¡Has ganado!" else "Game Over", style = MaterialTheme.typography.headlineLarge,
                 color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
-            Text(if (hasWon) "Recuperaste los 8 objetos y escapaste de la casa." else "El monstruo te atrapó.",
-                style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+            Text(
+                text = when {
+                    hasWon -> "Recuperaste los 8 objetos y escapaste de la casa."
+                    else -> "El monstruo te atrapó."
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center
+            )
             Text("Objetos: $collectedCount/8" + if (hasFlashlight) " · Linterna recuperada" else "")
             // Invitados conservan la victoria anterior; en derrota también se ve su puntuación.
             if (playerName.isNotBlank() || hasLost) {
@@ -1616,6 +1717,69 @@ fun GameScreen(onBack: () -> Unit) {
     val room = Room.valueOf(roomName)
     val activeWalls = roomWalls.getValue(room)
     val doorways = roomDoorways.getValue(room)
+    val listenerPosition = Offset(playerX, playerY)
+    val monsterPosition = Offset(monsterX, monsterY)
+
+    val monsterVolume = if (room == monsterRoom) {
+        val distance = (listenerPosition - monsterPosition).getDistance()
+        val proximity = 1f - (distance / 10f).coerceIn(0f, 1f)
+        0.23f + 0.37f * proximity
+    } else {
+        val distanceThroughDoor = doorways
+            .filter { door ->
+                door.kind != PortalKind.FINAL_ACCESS || collectedCount == TOTAL_OBJECTS
+            }
+            .filter { door -> door.destination().room == monsterRoom }
+            .minOfOrNull { door ->
+                val playerToDoor = (listenerPosition - door.position).getDistance()
+                val monsterToDoor = (monsterPosition - door.destination().position).getDistance()
+                playerToDoor + monsterToDoor
+            }
+
+        if (distanceThroughDoor == null) {
+            0.02f
+        } else {
+            val proximity = 1f - (distanceThroughDoor / 12f).coerceIn(0f, 1f)
+            0.04f + 0.16f * proximity
+        }
+    }
+
+    val smoothMonsterVolume by animateFloatAsState(
+        targetValue = monsterVolume,
+        label = "Volumen del monstruo"
+    )
+
+    BackgroundMusic(
+        track = R.raw.dolor_monstruo,
+        volume = smoothMonsterVolume
+    )
+
+    fun flashlightDirection(): Offset = when (playerFacing) {
+        "arriba" -> Offset(0f, -1f)
+        "abajo" -> Offset(0f, 1f)
+        "izquierda" -> Offset(-1f, 0f)
+        else -> Offset(1f, 0f)
+    }
+
+    fun monsterCanSee(from: Offset, to: Offset, walls: List<Wall>): Boolean {
+        val towardMonster = from - to
+        val distance = towardMonster.getDistance()
+        val beamDirection = flashlightDirection()
+        val projection = towardMonster.x * beamDirection.x +
+                towardMonster.y * beamDirection.y
+
+        val aimedAtMonster = distance > 0f &&
+                projection >= distance * MONSTER_BEAM_HALF_ANGLE_COS
+
+        val range = when {
+            !flashlightOn -> MONSTER_SIGHT_DARK
+            aimedAtMonster -> MONSTER_BEAM_DETECTION_RANGE
+            else -> MONSTER_SIGHT_LIT
+        }
+
+        return distance <= range &&
+                clearSegment(from, to, walls, WALL_THICKNESS / 2f)
+    }
 
     fun move(dx: Float, dy: Float) {
         if (!gameStarted || hasWon || hasLost || !windowFocused) return
@@ -1655,6 +1819,8 @@ fun GameScreen(onBack: () -> Unit) {
             isNear(next, flashlight, PICKUP_RADIUS)
         ) {
             hasFlashlight = true
+            flashlightOn = true
+            monsterPickupAlertUntil = SystemClock.elapsedRealtime() + MONSTER_PICKUP_ALERT_MS
             audioJuego.recoger()
         }
 
@@ -1667,6 +1833,7 @@ fun GameScreen(onBack: () -> Unit) {
                 isNear(next, item.position, PICKUP_RADIUS)
             ) {
                 collectedMask = collectedMask or (1 shl item.id)
+                monsterPickupAlertUntil = SystemClock.elapsedRealtime() + MONSTER_PICKUP_ALERT_MS
 
                 // Reproducir sonido al recoger el objeto
                 audioJuego.recoger()
@@ -1703,8 +1870,7 @@ fun GameScreen(onBack: () -> Unit) {
             // No conoce la ubicación del jugador a través de paredes u otras salas.
             val monsterPosition = Offset(monsterX, monsterY)
             val witnessed = currentRoom.name == monsterRoomName &&
-                isNear(monsterPosition, next, MONSTER_SIGHT_RANGE) &&
-                clearSegment(monsterPosition, next, walls, WALL_THICKNESS / 2f)
+                    monsterCanSee(monsterPosition, next, walls)
             if (witnessed) {
                 monsterFollowDoor = doorway.name
                 monsterRoamDoor = null
@@ -1760,7 +1926,7 @@ fun GameScreen(onBack: () -> Unit) {
 
         // Reaparición en una sala VECINA, nunca encima del jugador ni dentro del área final.
         // Se desactiva en los corredores para no interrumpir la persecución final.
-        if (now >= nextMonsterWarpAt) {
+        if (now >= nextMonsterWarpAt && darknessTrackingSeconds <= 0f) {
             nextMonsterWarpAt = now + nextMonsterWarpDelay(count)
             if (!isFinalRoom(playerRoom) && !isFinalRoom(currentRoom) && currentRoom != playerRoom) {
                 val nearbyArrivals = roomDoorways.getValue(playerRoom)
@@ -1777,13 +1943,13 @@ fun GameScreen(onBack: () -> Unit) {
         val brain = brainFor(currentRoom)
         var position = Offset(monsterX, monsterY)
         val player = Offset(playerX, playerY)
-        val knowsPosition = count == TOTAL_OBJECTS
-        val tracksPlayerHere = knowsPosition && playerRoom == currentRoom
-        val seesPlayer = roomName == monsterRoomName &&
-            isNear(position, player, MONSTER_SIGHT_RANGE) &&
-            clearSegment(position, player, walls, WALL_THICKNESS / 2f)
-        val detectaCercania = playerRoom == currentRoom &&
-                isNear(position, player, 4f)
+        val knowsPosition = count == TOTAL_OBJECTS ||
+                darknessTrackingSeconds > 0f ||
+                now < monsterPickupAlertUntil
+        val seesPlayer = playerRoom == currentRoom &&
+                monsterCanSee(position, player, walls)
+        val tracksMovingPlayer = seesPlayer ||
+                (knowsPosition && playerRoom == currentRoom)
         val allowedDoors = roomDoorways.getValue(currentRoom).filter {
             it.kind != PortalKind.FINAL_ACCESS || count == TOTAL_OBJECTS
         }
@@ -1792,21 +1958,31 @@ fun GameScreen(onBack: () -> Unit) {
             allowedDoors.firstOrNull { it.name == name }
         }
         if (monsterFollowDoor != null && followDoor == null) monsterFollowDoor = null
+        if (seesPlayer) {
+            monsterLastSeenPosition = player
+            monsterLastSeenUntil = now + MONSTER_SEARCH_TIME_MS
+        }
+
+        val lastSeenTarget = monsterLastSeenPosition?.takeIf {
+            !knowsPosition && !seesPlayer && followDoor == null &&
+                    now < monsterLastSeenUntil
+        }
+
         val pursuing = knowsPosition || seesPlayer ||
-                detectaCercania || followDoor != null
+                followDoor != null || lastSeenTarget != null
         if (pursuing != monsterChasing) {
             brain.reset()
             monsterDoorWait = 0f
         }
         monsterChasing = pursuing
-        if (seesPlayer || detectaCercania || tracksPlayerHere) {
+        if (tracksMovingPlayer) {
             monsterFollowDoor = null
             monsterRoamDoor = null
             monsterDoorWait = 0f
         }
 
         var targetDoor: Doorway? = null
-        if (!seesPlayer && !detectaCercania && !tracksPlayerHere) {
+        if (!tracksMovingPlayer&& lastSeenTarget == null) {
             targetDoor = if (knowsPosition) nextDoorToward(currentRoom, playerRoom, count) else followDoor
             if (targetDoor == null) {
                 targetDoor = allowedDoors.firstOrNull { it.name == monsterRoamDoor }
@@ -1826,10 +2002,17 @@ fun GameScreen(onBack: () -> Unit) {
                 }
             }
         }
-        val tracksMovingPlayer = seesPlayer ||
-                detectaCercania || tracksPlayerHere
-        val target = if (tracksMovingPlayer) player else targetDoor?.position ?: return
-        val targetId = if (tracksMovingPlayer) "PLAYER" else targetDoor?.name
+        val target = when {
+            tracksMovingPlayer -> player
+            lastSeenTarget != null -> lastSeenTarget
+            else -> targetDoor?.position ?: return
+        }
+
+        val targetId = when {
+            tracksMovingPlayer -> "PLAYER"
+            lastSeenTarget != null -> "LAST_SEEN"
+            else -> targetDoor?.name
+        }
         if (targetId != monsterNavigationTarget) {
             monsterNavigationTarget = targetId
             brain.reset()
@@ -1838,10 +2021,18 @@ fun GameScreen(onBack: () -> Unit) {
         brain.age += seconds
         if ((tracksMovingPlayer && brain.age >= 0.35f) || brain.index >= brain.path.size) {
             brain.path = brain.route(position, target)
-            brain.index = 0
+            brain.index = brain.path.indexOfLast { waypoint ->
+                clearSegment(position, waypoint, walls, PLAYER_RADIUS + WALL_THICKNESS / 2f)
+            }.coerceAtLeast(0)
             brain.age = 0f
         }
-        val speed = if (pursuing) monsterChaseSpeed(count) else monsterPatrolSpeed(count)
+        val baseSpeed = if (pursuing) monsterChaseSpeed(count) else monsterPatrolSpeed(count)
+        val darknessBoost = if (count < TOTAL_OBJECTS && hasFlashlight && !flashlightOn) {
+            darknessSeconds * MONSTER_DARK_SPEED_PER_SECOND
+        } else {
+            0f
+        }
+        val speed = baseSpeed + darknessBoost
         var remaining = seconds * speed
         while (remaining > 0f && brain.index < brain.path.size) {
             val waypoint = brain.path[brain.index]
@@ -1861,7 +2052,9 @@ fun GameScreen(onBack: () -> Unit) {
             remaining -= step
             if (step >= distance) brain.index++
         }
-
+        if (lastSeenTarget != null && isNear(position, lastSeenTarget, 0.35f)) {
+            monsterLastSeenPosition = null
+        }
         val movimientoMonstruo = position - Offset(monsterX, monsterY)
 
         if (movimientoMonstruo.getDistance() > 0.002f) {
@@ -1890,7 +2083,34 @@ fun GameScreen(onBack: () -> Unit) {
             monsterDoorWait = 0f
         }
     }
+    fun updateFlashlight(seconds: Float) {
+        if (!gameStarted || hasWon || hasLost || !windowFocused || !hasFlashlight) return
+        if (nightmarePhase) return
+        darknessTrackingSeconds = (darknessTrackingSeconds - seconds).coerceAtLeast(0f)
+        if (flashlightOn) {
+            flashlightCharge = (flashlightCharge - seconds).coerceAtLeast(0f)
+            darknessSeconds = (darknessSeconds - seconds * 3f).coerceAtLeast(0f)
+            if (flashlightCharge == 0f) {
+                flashlightOn = false
+                flashlightDepleted = true
+            }
+        } else {
+            flashlightCharge = (flashlightCharge + seconds * FLASHLIGHT_RECHARGE_RATE)
 
+                .coerceAtMost(FLASHLIGHT_CAPACITY)
+            if (flashlightDepleted && flashlightCharge >= FLASHLIGHT_RECOVERY_CHARGE) {
+                flashlightDepleted = false
+            }
+            darknessSeconds = (darknessSeconds + seconds).coerceAtMost(DARKNESS_LIMIT)
+            if (darknessSeconds >= DARKNESS_LIMIT) {
+                darknessTrackingSeconds = DARKNESS_TRACKING_TIME
+            }
+        }
+    }
+
+    val flashlightNow by rememberUpdatedState(
+        newValue = { seconds: Float -> updateFlashlight(seconds) }
+    )
     val moveNow by rememberUpdatedState(newValue = { dx: Float, dy: Float -> move(dx, dy) })
     val monsterNow by rememberUpdatedState(newValue = { seconds: Float -> updateMonster(seconds) })
     // El monstruo y la captura se actualizan incluso si el joystick está quieto.
@@ -1906,6 +2126,7 @@ fun GameScreen(onBack: () -> Unit) {
                 moveNow(direction.x * MOVE_SPEED * seconds, direction.y * MOVE_SPEED * seconds)
             }
             monsterNow(seconds)
+            flashlightNow(seconds)
 
 
 // Calcular distancia entre jugador y monstruo
@@ -1955,6 +2176,7 @@ fun GameScreen(onBack: () -> Unit) {
             if (hasFlashlight) " · Linterna ✓" else "",
         style = MaterialTheme.typography.labelLarge
     )
+
 
     val playerColor = MaterialTheme.colorScheme.primary
     val spriteLinterna = ImageBitmap.imageResource(R.drawable.linterna)
@@ -2275,7 +2497,23 @@ fun GameScreen(onBack: () -> Unit) {
                     filterQuality = FilterQuality.None
                 )
             }
-
+            if (nightmarePhase) {
+                drawRect(color = Color(0x66C21F38))
+            } else {
+                val lightCenter = Offset(playerX, playerY) * unit
+                val lightRadius = (if (flashlightOn) 4f else 1.7f) * unit
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = if (flashlightOn) {
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))
+                        } else {
+                            listOf(Color.Black.copy(alpha = 0.25f), Color.Black.copy(alpha = 0.92f))
+                        },
+                        center = lightCenter,
+                        radius = lightRadius
+                    )
+                )
+            }
 
             if (room == monsterRoom) {
 
@@ -2287,7 +2525,18 @@ fun GameScreen(onBack: () -> Unit) {
                 }
 
                 val centro = Offset(monsterX, monsterY) * unit
+                val glowColor = if (monsterChasing) Color(0xFFFF4545) else Color(0xFF36A9FF)
+                val glowRadius = 1.1f * unit
 
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(glowColor.copy(alpha = 0.8f), Color.Transparent),
+                        center = centro,
+                        radius = glowRadius
+                    ),
+                    radius = glowRadius,
+                    center = centro
+                )
                 val ancho = (1.0f * unit)
                     .roundToInt()
                     .coerceAtLeast(1)
@@ -2310,7 +2559,7 @@ fun GameScreen(onBack: () -> Unit) {
 
 
 
-            if (hasFlashlight) {
+            if (flashlightOn  && !nightmarePhase) {
 
                 val origen = Offset(playerX, playerY) * unit
 
@@ -2399,7 +2648,7 @@ fun GameScreen(onBack: () -> Unit) {
                 contentColor = if (monsterChasing) Color(0xFFFF7474) else Color(0xFFE8CBD0),
                 shape = MaterialTheme.shapes.small
             ) {
-                Text(if (collectedCount == TOTAL_OBJECTS) "¡Sabe dónde estás!"
+                Text(if (collectedCount == TOTAL_OBJECTS ) "¡Sabe dónde estás!"
                     else if (monsterChasing) "¡Te está persiguiendo!" else "Monstruo: merodeando",
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     style = MaterialTheme.typography.labelMedium)
@@ -2431,6 +2680,95 @@ fun GameScreen(onBack: () -> Unit) {
             onDirectionChange = { joystickDirection = it },
             onNudge = { direction -> move(direction.x * MOVE_STEP, direction.y * MOVE_STEP) }
         )
+        if (hasFlashlight && !nightmarePhase) {
+            val charge = (flashlightCharge / FLASHLIGHT_CAPACITY).coerceIn(0f, 1f)
+
+            val statusColor = Color(0xFFFF7474)
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 8.dp)
+                    .width(76.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Luz ${(charge * 100f).roundToInt()}%",
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(Color(0xFF38333B))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(charge)
+                            .fillMaxHeight()
+                            .background(statusColor)
+                    )
+                }
+            }
+        }
+        if (hasFlashlight) {
+            IconButton(
+                enabled = flashlightOn ||
+                        (!flashlightDepleted && flashlightCharge >= FLASHLIGHT_MIN_CHARGE),
+                onClick = {
+                    view.playSoundEffect(SoundEffectConstants.CLICK)
+                    flashlightOn = !flashlightOn
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp)
+                    .size(56.dp)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = if (flashlightOn) {
+                                listOf(Color(0xFFFFD36A), Color(0xFF58401B))
+                            } else {
+                                listOf(Color(0xFF29262C), Color(0xFF151319))
+                            }
+                        ),
+                        shape = CircleShape
+                    )
+            ) {
+                Image(
+                    bitmap = spriteLinterna,
+                    contentDescription = if (flashlightOn) {
+                        "Apagar linterna"
+                    } else {
+                        "Encender linterna"
+                    },
+                    modifier = Modifier.size(30.dp),
+                    alpha = if (flashlightOn) 1f else 0.45f
+                )
+            }
+        }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (hasFlashlight) {
+            val warning = when {
+                darknessTrackingSeconds > 0f -> "El monstruo te rastrea"
+                darknessSeconds >= DARKNESS_WARNING -> {
+                    val remaining = kotlin.math.ceil(DARKNESS_LIMIT - darknessSeconds).toInt()
+                    "Te localizará en ${remaining}s"
+                }
+                else -> ""
+            }
+
+            Text(
+                text = warning,
+                color = Color(0xFFFF7474),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1
+            )
+        }
     }
 }
 

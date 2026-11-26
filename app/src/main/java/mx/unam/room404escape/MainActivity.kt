@@ -21,6 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import mx.unam.room404escape.ui.*
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 
 class MainActivity : ComponentActivity() {
 
@@ -36,6 +40,16 @@ fun EscapeApp(vm: EscapeViewModel = viewModel()) {
 
     val s = vm.state
     val isPlaying = s.screen == Screen.GAME
+    var gameMusicTrack by rememberSaveable(s.screen) {
+        mutableStateOf<Int?>(R.raw.musica_menu)
+    }
+
+    val musicTrack = if (isPlaying) gameMusicTrack else R.raw.musica_menu
+
+    if (musicTrack != null) {
+        val volume = if (musicTrack == R.raw.musica_menu) 0.45f else 0.22f
+        BackgroundMusic(track = musicTrack, volume = volume)
+    }
 
     HorrorTheme(s.alternate) {
 
@@ -86,9 +100,8 @@ fun EscapeApp(vm: EscapeViewModel = viewModel()) {
 
                     Screen.GAME -> {
                         GameScreen(
-                            onBack = {
-                                vm.navigate(Screen.MENU)
-                            }
+                            onBack = { vm.navigate(Screen.MENU) },
+                            onMusicTrackChanged = { gameMusicTrack = it }
                         )
                     }
 
@@ -327,6 +340,34 @@ fun EscapeApp(vm: EscapeViewModel = viewModel()) {
                             style = MaterialTheme.typography.bodyLarge
                         )
 
+
+                        HorizontalDivider()
+
+                        Text(
+                            "MÚSICA",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            "Anywhere Ever Ending Today - Stage 4 - H1 - Living Hell Segment",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+
+                        Text(
+                            "Por Lexeidgs [Diego Alexei]",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        Text(
+                            "Cover CandyMan piano",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+
+                        Text(
+                            "Por Diego Alexei",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
 
                         HorizontalDivider()
 
