@@ -478,6 +478,7 @@ fun GameScreen(onBack: () -> Unit) {
     var roomName by rememberSaveable { mutableStateOf(Room.MAIN.name) }
     var playerX by rememberSaveable { mutableFloatStateOf(entrance.x) }
     var playerY by rememberSaveable { mutableFloatStateOf(entrance.y) }
+    var playerFacing by rememberSaveable { mutableStateOf("abajo") }
     var hasFlashlight by rememberSaveable { mutableStateOf(false) }
     var collectedMask by rememberSaveable { mutableIntStateOf(0) }
     var hasWon by rememberSaveable { mutableStateOf(false) }
@@ -743,6 +744,15 @@ fun GameScreen(onBack: () -> Unit) {
         val vertical = next + Offset(0f, dy)
         if (!hitsWall(vertical, walls)) next = vertical
         if (next == previous) return
+        val movimiento = next - previous
+
+        playerFacing = if (
+            kotlin.math.abs(movimiento.x) > kotlin.math.abs(movimiento.y)
+        ) {
+            if (movimiento.x > 0f) "derecha" else "izquierda"
+        } else {
+            if (movimiento.y > 0f) "abajo" else "arriba"
+        }
 
         playerX = next.x
         playerY = next.y
@@ -980,6 +990,13 @@ fun GameScreen(onBack: () -> Unit) {
 
     val playerColor = MaterialTheme.colorScheme.primary
     val spriteLinterna = ImageBitmap.imageResource(R.drawable.linterna)
+    val spriteAbajo = ImageBitmap.imageResource(R.drawable.personaje_abajo)
+    val spriteArriba = ImageBitmap.imageResource(R.drawable.personaje_arriba)
+    val spriteIzquierda = ImageBitmap.imageResource(R.drawable.personaje_izquierda)
+    val spriteDerecha = ImageBitmap.imageResource(R.drawable.personaje_derecha)
+    val spritePuerta1 = ImageBitmap.imageResource(R.drawable.puerta1)
+    val spritePuerta2 = ImageBitmap.imageResource(R.drawable.puerta2)
+    val spritePuerta3 = ImageBitmap.imageResource(R.drawable.puerta3)
     val spritesObjetos = listOf(
         ImageBitmap.imageResource(R.drawable.llave),
         ImageBitmap.imageResource(R.drawable.bateria),
@@ -1010,9 +1027,40 @@ fun GameScreen(onBack: () -> Unit) {
                     strokeWidth = WALL_THICKNESS * unit
                 )
             }
+
+
             doorways.forEach { doorway ->
-                drawCircle(doorway.kind.color, 0.32f * unit, doorway.position * unit)
+
+                val centro = doorway.position * unit
+
+                val imagen = when (doorway.kind) {
+                    PortalKind.ROOM -> spritePuerta1
+                    PortalKind.STAIRS -> spritePuerta3
+                    PortalKind.FINAL_ACCESS -> spritePuerta2
+                }
+
+                // Puerta un poco más grande.
+                val ancho = (1.8f * unit)
+                    .roundToInt()
+                    .coerceAtLeast(1)
+
+                val alto = (
+                        ancho * imagen.height.toFloat() /
+                                imagen.width
+                        ).roundToInt().coerceAtLeast(1)
+
+                drawImage(
+                    image = imagen,
+                    dstOffset = IntOffset(
+                        (centro.x - ancho / 2f).roundToInt(),
+                        (centro.y - alto / 2f).roundToInt()
+                    ),
+                    dstSize = IntSize(ancho, alto),
+                    filterQuality = FilterQuality.None
+                )
             }
+
+
             if (room == Room.FINAL_UPPER) {
                 drawCircle(Color(0xFFFF7B22), 0.32f * unit, finalMarker * unit)
             }
@@ -1076,7 +1124,29 @@ fun GameScreen(onBack: () -> Unit) {
                     size = androidx.compose.ui.geometry.Size(halfSize * 2f, halfSize * 2f)
                 )
             }
-            drawCircle(playerColor, PLAYER_RADIUS * unit, Offset(playerX, playerY) * unit)
+
+            val imagenJugador = when (playerFacing) {
+                "arriba" -> spriteArriba
+                "izquierda" -> spriteIzquierda
+                "derecha" -> spriteDerecha
+                else -> spriteAbajo
+            }
+
+            val centroJugador = Offset(playerX, playerY) * unit
+            val tamanoJugador = (1.2f * unit)
+                .roundToInt()
+                .coerceAtLeast(1)
+
+            drawImage(
+                image = imagenJugador,
+                dstOffset = IntOffset(
+                    (centroJugador.x - tamanoJugador / 2f).roundToInt(),
+                    (centroJugador.y - tamanoJugador / 2f).roundToInt()
+                ),
+                dstSize = IntSize(tamanoJugador, tamanoJugador),
+                filterQuality = FilterQuality.None
+            )
+
         }
     
         if (room == monsterRoom) {
